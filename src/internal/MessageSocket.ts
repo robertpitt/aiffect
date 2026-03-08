@@ -1,18 +1,18 @@
-import { Effect, ParseResult, Queue, Schema, Stream } from "effect";
+import { Effect, Queue, Schema, Stream } from "effect";
 import type { Scope } from "effect";
 import type WebSocket from "ws";
-import { ProviderError } from "../core/Errors.js";
+import { ProviderError } from "@/core/Errors.js";
 
 /**
  * Decode raw JSON at the provider message boundary. Use in adapters before passing to pure handlers.
- * Returns an Effect that succeeds with the decoded value or fails with ParseResult.ParseError.
+ * Returns an Effect that succeeds with the decoded value or fails with Schema.SchemaError.
  */
 export const decodeAtBoundary =
-  <A, I, R>(
-    schema: Schema.Schema<A, I, R>,
-  ): ((raw: unknown) => Effect.Effect<A, ParseResult.ParseError, R>) =>
+  <S extends Schema.Top>(
+    schema: S,
+  ): ((raw: unknown) => Effect.Effect<S["Type"], Schema.SchemaError, S["DecodingServices"]>) =>
   (raw) =>
-    Schema.decodeUnknown(schema)(raw);
+    Schema.decodeUnknownEffect(schema)(raw);
 
 export interface MessageSocket {
   readonly send: (msg: Record<string, unknown>) => Effect.Effect<void, ProviderError>;
@@ -80,7 +80,7 @@ export const make = (
     });
 
     const inbound = Stream.fromQueue(queue).pipe(
-      Stream.catchAll(() =>
+      Stream.catch(() =>
         Stream.fail(
           new ProviderError({
             provider,

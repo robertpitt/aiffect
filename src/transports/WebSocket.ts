@@ -1,8 +1,8 @@
 import { Effect, Layer, Queue, Stream } from "effect";
 import type WebSocket from "ws";
-import { AudioFrame } from "../core/AudioFrame.js";
-import { Transport } from "../core/Transport.js";
-import { TransportError } from "../core/Errors.js";
+import { AudioFrame } from "@/core/AudioFrame.js";
+import { Transport } from "@/core/Transport.js";
+import { TransportError } from "@/core/Errors.js";
 
 const DEFAULT_SAMPLE_RATE = 24000;
 const DEFAULT_CHANNELS = 1;
@@ -36,8 +36,7 @@ export const fromWebSocket = (
   const capacity = options?.queueCapacity;
   const dropStrategy = options?.queueDropStrategy ?? "drop-oldest";
 
-  return Layer.scoped(
-    Transport,
+  return Layer.effect(Transport)(
     Effect.gen(function* () {
       const queue = yield* capacity != null && capacity > 0
         ? dropStrategy === "drop-newest"
@@ -99,7 +98,7 @@ export const fromWebSocket = (
       );
 
       const inbound = Stream.fromQueue(queue).pipe(
-        Stream.catchAll(() => Stream.fail(new TransportError({ reason: "WebSocket closed" }))),
+        Stream.catch(() => Stream.fail(new TransportError({ reason: "WebSocket closed" }))),
       );
 
       const send = (frame: AudioFrame) =>

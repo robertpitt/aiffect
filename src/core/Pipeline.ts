@@ -1,6 +1,6 @@
-import { Context, Effect, Layer, Stream } from "effect";
-import type { PipelineEvent } from "./Events.js";
-import type { PipelineError } from "./Errors.js";
+import { Effect, Layer, ServiceMap, Stream } from "effect";
+import type { PipelineEvent } from "@/core/Events.js";
+import type { PipelineError } from "@/core/Errors.js";
 
 /**
  * Helper to create a Pipeline layer from an Effect that yields { run, events }.
@@ -42,7 +42,7 @@ export type PipelineRequirements =
   | import("./Provider.js").Realtime
   | import("./Provider.js").STT
   | import("./Provider.js").TTS
-  | import("@effect/ai").LanguageModel.LanguageModel
+  | import("effect/unstable/ai").LanguageModel.LanguageModel
   | import("./Agent.js").Agent
   | import("effect").Scope.Scope;
 
@@ -50,4 +50,4 @@ export type PipelineRequirements =
  * @name Pipeline
  * @description The pipeline context that will be used to run the pipeline.
  */
-export class Pipeline extends Context.Tag("@aiffect/Pipeline")<Pipeline, PipelineShape>() {}
+export class Pipeline extends ServiceMap.Service<Pipeline, PipelineShape>()("@aiffect/Pipeline") {}

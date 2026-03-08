@@ -1,6 +1,6 @@
-import { Context, Effect, Stream } from "effect";
-import type { AudioFrame } from "./AudioFrame.js";
-import type { TransportError } from "./Errors.js";
+import { Effect, ServiceMap, Stream } from "effect";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import type { TransportError } from "@/core/Errors.js";
 
 export interface TransportShape {
   readonly inbound: Stream.Stream<AudioFrame, TransportError>;
@@ -8,4 +8,6 @@ export interface TransportShape {
   readonly clear?: Effect.Effect<void, TransportError>;
 }
 
-export class Transport extends Context.Tag("@aiffect/Transport")<Transport, TransportShape>() {}
+export class Transport extends ServiceMap.Service<Transport, TransportShape>()(
+  "@aiffect/Transport",
+) {}

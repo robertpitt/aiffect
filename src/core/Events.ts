@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 export class TranscriptDelta extends Schema.TaggedClass<TranscriptDelta>()("TranscriptDelta", {
-  role: Schema.Literal("user", "assistant"),
+  role: Schema.Literals(["user", "assistant"]),
   text: Schema.String,
   isFinal: Schema.Boolean,
 }) {}
@@ -36,7 +36,7 @@ export class ToolCallCompleted extends Schema.TaggedClass<ToolCallCompleted>()(
     callId: Schema.String,
     name: Schema.String,
     /** Discriminant: success vs failure. Use `error` when status === "failure". */
-    status: Schema.Literal("success", "failure"),
+    status: Schema.Literals(["success", "failure"]),
     /** Present when status === "success". */
     result: Schema.optional(Schema.Unknown),
     /** Present when status === "failure". */
@@ -55,9 +55,9 @@ export class ResponseCompleted extends Schema.TaggedClass<ResponseCompleted>()(
     responseId: Schema.String,
     timestamp: Schema.Number,
     status: Schema.String,
-    inputTokens: Schema.optionalWith(Schema.Number, { default: () => 0 }),
-    outputTokens: Schema.optionalWith(Schema.Number, { default: () => 0 }),
-    audioFrames: Schema.optionalWith(Schema.Number, { default: () => 0 }),
+    inputTokens: Schema.Number.pipe(Schema.withDecodingDefault(() => 0)),
+    outputTokens: Schema.Number.pipe(Schema.withDecodingDefault(() => 0)),
+    audioFrames: Schema.Number.pipe(Schema.withDecodingDefault(() => 0)),
   },
 ) {}
 

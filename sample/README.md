@@ -39,16 +39,20 @@ export const restaurantAgent: AgentSpec = {
 };
 ```
 
-## Run the example
+## Run the examples
 
-From the project root:
+**Production-grade (recommended):** Single concierge agent with full toolset:
 
 ```bash
-OPENAI_API_KEY=sk-... npx tsx examples/multi-agent-toolkits.ts
+OPENAI_API_KEY=sk-... npx tsx examples/voice-concierge.ts
 ```
 
-Then open:
+**Concierge (sample agents):** Uses concierge agent from this sample:
 
-- `http://localhost:8081?agent=restaurant` – restaurant + menu
-- `http://localhost:8081?agent=reservations` – restaurant + reservations
-- `http://localhost:8081?agent=concierge` – all tools (default)
+```bash
+OPENAI_API_KEY=sk-... npx tsx examples/concierge.openai.ts
+# or:
+GEMINI_API_KEY=... npx tsx examples/concierge.gemini.ts
+```
+
+Then open `http://localhost:8081`.

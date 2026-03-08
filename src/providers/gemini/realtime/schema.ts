@@ -28,7 +28,7 @@ export const GeminiServerContentSchema = Schema.Struct({
 const GeminiFunctionCall = Schema.Struct({
   id: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
-  args: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
+  args: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 const GeminiToolCall = Schema.Struct({
   functionCalls: Schema.optional(Schema.Array(GeminiFunctionCall)),

@@ -2,7 +2,7 @@
  * Gemini Live Realtime — pure message handler: server message + state → actions + next state.
  */
 
-import { AudioFrame } from "../../../core/AudioFrame.js";
+import { AudioFrame } from "@/core/AudioFrame.js";
 import {
   TranscriptDelta,
   SpeechStarted,
@@ -11,11 +11,11 @@ import {
   ResponseCompleted,
   AudioOutputStarted,
   AudioOutputDone,
-} from "../../../core/Events.js";
-import type { RealtimeAction } from "../../../core/RealtimeTypes.js";
-import type { GeminiServerMessage, GeminiHandlerState } from "./schema.js";
-export type { GeminiHandlerState } from "./schema.js";
-export { initialGeminiHandlerState } from "./schema.js";
+} from "@/core/Events.js";
+import type { RealtimeAction } from "@/core/RealtimeTypes.js";
+import type { GeminiServerMessage, GeminiHandlerState } from "@/providers/gemini/realtime/schema.js";
+export type { GeminiHandlerState } from "@/providers/gemini/realtime/schema.js";
+export { initialGeminiHandlerState } from "@/providers/gemini/realtime/schema.js";
 
 const DEFAULT_SAMPLE_RATE = 24000;
 const CHANNELS = 1;
@@ -64,6 +64,7 @@ export function handleGeminiMessage(
             responseId: nextState.responseId,
             timestamp: ts,
             status: "cancelled",
+            inputTokens: 0,
             outputTokens: 0,
             audioFrames: nextState.audioFrameCount,
           }),

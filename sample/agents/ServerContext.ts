@@ -4,7 +4,7 @@
  * and session-scoped operations. Tools can use getSession() for scope (e.g. tenant, sessionId).
  */
 import { Effect, Layer } from "effect";
-import { ServerContext, type ServerContextShape } from "../../src/core/ServerContext.js";
+import { ServerContext, type ServerContextShape } from "@/core/ServerContext.js";
 
 /** In real apps these would be DB/API clients; here we use in-memory mocks. */
 export interface RestaurantRepository {

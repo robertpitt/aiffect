@@ -3,32 +3,34 @@
  * Configurable for streaming vs non-streaming and optional energy-based barge-in.
  */
 
-import { Chat } from "@effect/ai";
+import { Chat } from "effect/unstable/ai";
 import { Effect, Fiber, Layer, Queue, Ref, Stream } from "effect";
-import type { PipelineEvent } from "../core/Events.js";
+import type { PipelineEvent } from "@/core/Events.js";
 import {
   TranscriptDelta,
   SpeechStarted,
   SpeechEnded,
   Interrupted,
   ResponseCompleted,
-} from "../core/Events.js";
-import { Pipeline } from "../core/Pipeline.js";
-import { Transport } from "../core/Transport.js";
-import { STT, TTS } from "../core/Provider.js";
-import { toPipelineError } from "../core/Errors.js";
-import { Agent, type AgentContext, type AgentSpec } from "../core/Agent.js";
-import { SessionContext, makeSessionContext } from "../core/SessionContext.js";
-import { logEvent } from "../observability/EventLogger.js";
-import { make as makeEventBroadcast } from "./EventBroadcast.js";
-import type { AudioFrame } from "../core/AudioFrame.js";
-import { toolkitAsEffect } from "../internal/toolkitCompat.js";
-import { createInboundMonitor } from "./BargeInEnergy.js";
-import type { BargeInConfig } from "./BargeInConfig.js";
-import { trackTokenUsage } from "../observability/UsageMetrics.js";
+} from "@/core/Events.js";
+import { Pipeline } from "@/core/Pipeline.js";
+import { Transport } from "@/core/Transport.js";
+import { STT, TTS } from "@/core/Provider.js";
+import { toPipelineError } from "@/core/Errors.js";
+import { Agent, type AgentSpec } from "@/core/Agent.js";
+import { AgentContext, makeAgentContext } from "@/core/AgentContext.js";
+import { SessionContext, makeSessionContext } from "@/core/SessionContext.js";
+import { logEvent } from "@/observability/EventLogger.js";
+import { make as makeEventBroadcast } from "@/pipelines/EventBroadcast.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import { toolkitAsEffect } from "@/internal/toolkitCompat.js";
+import { createInboundMonitor } from "@/pipelines/BargeInEnergy.js";
+import type { BargeInConfig } from "@/pipelines/BargeInConfig.js";
+import { trackTokenUsage } from "@/observability/UsageMetrics.js";
 
 const SENTENCE_SPLIT = /(?<=[.!?])\s+/;
 const DefaultSessionContext = makeSessionContext({ sessionId: crypto.randomUUID() });
+const DefaultAgentContext = makeAgentContext({});
 
 export interface SandwichCoreConfig {
   /** When present, enables streaming LLM + sentence-chunked TTS and energy-based barge-in. */
@@ -44,8 +46,8 @@ function makeProcessTranscriptNonStreaming(
     }>;
   },
   agent: AgentSpec,
-  transport: Transport["Type"],
-  tts: import("../core/Provider.js").TTS["Type"],
+  transport: Transport["Service"],
+  tts: import("@/core/Provider.js").TTS["Service"],
 ) {
   return (transcript: string) =>
     Effect.gen(function* () {
@@ -80,8 +82,17 @@ function makeProcessTranscriptNonStreaming(
 
       const responseId = crypto.randomUUID();
       const timestamp = Date.now();
-      const inputTokens = response.usage?.inputTokens ?? 0;
-      const outputTokens = response.usage?.outputTokens ?? 0;
+      const usage = response.usage as
+        | { inputTokens?: { total?: number } | number; outputTokens?: { total?: number } | number }
+        | undefined;
+      const inputTokens =
+        typeof usage?.inputTokens === "object"
+          ? (usage.inputTokens?.total ?? 0)
+          : (usage?.inputTokens ?? 0);
+      const outputTokens =
+        typeof usage?.outputTokens === "object"
+          ? (usage.outputTokens?.total ?? 0)
+          : (usage?.outputTokens ?? 0);
       const completed = new ResponseCompleted({
         responseId,
         timestamp,
@@ -102,8 +113,8 @@ function makeProcessTranscriptStreaming(
   emit: (e: PipelineEvent) => Effect.Effect<void>,
   chat: { streamText: (opts: object) => Stream.Stream<{ type: string; delta?: string }> },
   agent: AgentSpec,
-  transport: Transport["Type"],
-  tts: import("../core/Provider.js").TTS["Type"],
+  transport: Transport["Service"],
+  tts: import("@/core/Provider.js").TTS["Service"],
   assistantSpeaking: Ref.Ref<boolean>,
 ) {
   return (transcript: string) =>
@@ -148,7 +159,7 @@ function makeProcessTranscriptStreaming(
         yield* Ref.set(assistantSpeaking, true);
         yield* emit(new SpeechStarted({ timestamp: Date.now() }));
         yield* Stream.fromQueue(sentenceQueue).pipe(
-          Stream.catchAll(() => Stream.empty),
+          Stream.catch(() => Stream.empty),
           Stream.mapEffect((sentence) =>
             tts.synthesize(sentence).pipe(
               Stream.mapEffect((frame) => {
@@ -204,9 +215,9 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
       const agent = yield* Agent;
       const eventBroadcast = yield* makeEventBroadcast;
 
-      const { sessionId } = yield* SessionContext;
-      const agentContext: AgentContext = { sessionId, metadata: {} };
-      const systemPrompt = agent.buildPrompt(agentContext);
+      const agentContext = yield* AgentContext;
+      const sessionContext = yield* SessionContext;
+      const systemPrompt = agent.buildPrompt(agentContext, sessionContext);
       const chat = yield* Chat.fromPrompt([
         { role: "system", content: systemPrompt },
       ]);
@@ -218,7 +229,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
         // SandwichBargeIn: two fibers, energy-based barge-in
         const audioQueue = yield* Queue.unbounded<AudioFrame>();
         const assistantSpeaking = yield* Ref.make(false);
-        const currentTurnFiber = yield* Ref.make<Fiber.RuntimeFiber<
+        const currentTurnFiber = yield* Ref.make<Fiber.Fiber<
           void,
           unknown
         > | null>(null);
@@ -233,7 +244,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
           yield* emit(new Interrupted({ timestamp: Date.now() }));
         }).pipe(
           Effect.withSpan("sandwich.bargeIn"),
-          Effect.catchAll((cause) =>
+          Effect.catch((cause) =>
             Effect.logError("barge-in failed").pipe(
               Effect.annotateLogs("error", String(cause)),
             ),
@@ -262,7 +273,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
         );
 
         const sttInbound = Stream.fromQueue(audioQueue).pipe(
-          Stream.catchAll(() => Stream.empty),
+          Stream.catch(() => Stream.empty),
         );
 
         const turnFiber = stt.transcribe(sttInbound).pipe(
@@ -275,9 +286,9 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
                 yield* Ref.set(assistantSpeaking, false);
                 if (transport.clear) yield* transport.clear;
               }
-              const fiber = yield* Effect.fork(
+              const fiber = yield* Effect.forkChild(
                 processTranscript(t.text).pipe(
-                  Effect.catchAll((cause) =>
+                  Effect.catch((cause) =>
                     Effect.logError("sandwich turn error").pipe(
                       Effect.annotateLogs("error", String(cause)),
                     ),
@@ -305,7 +316,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
             ),
           ),
           Effect.tap(() => Effect.log("sandwich loop ended")),
-          Effect.catchAll((cause) =>
+          Effect.catch((cause) =>
             Effect.fail(
               toPipelineError(cause, "Sandwich barge-in pipeline failed"),
             ),
@@ -314,7 +325,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
         );
 
         return {
-          run: run as Pipeline["Type"]["run"],
+          run: run as Pipeline["Service"]["run"],
           events: eventBroadcast.subscribe,
         };
       }
@@ -332,7 +343,7 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
         Stream.filter((t) => t.isFinal && t.text.trim().length > 0),
         Stream.mapEffect((t) =>
           processTranscript(t.text).pipe(
-            Effect.catchAll((cause) =>
+            Effect.catch((cause) =>
               Effect.logError("sandwich turn error").pipe(
                 Effect.annotateLogs("error", String(cause)),
               ),
@@ -347,9 +358,12 @@ export function makeSandwichCore(config: SandwichCoreConfig = {}) {
       );
 
       return {
-        run: run as Pipeline["Type"]["run"],
+        run: run as Pipeline["Service"]["run"],
         events: eventBroadcast.subscribe,
       };
     }),
-  ).pipe(Layer.provideMerge(DefaultSessionContext));
+  ).pipe(
+    Layer.provideMerge(DefaultSessionContext),
+    Layer.provideMerge(DefaultAgentContext),
+  );
 }

@@ -1,11 +1,11 @@
 import { Effect, Schema } from "effect";
-import { ServerContext } from "../../../src/core/ServerContext.js";
-import { Tool, Toolkit } from "@effect/ai";
+import { ServerContext } from "@/core/ServerContext.js";
+import { Tool, Toolkit } from "effect/unstable/ai";
 import type { SampleServerContextShape } from "../ServerContext.js";
 
 const getMenu = Tool.make("getMenu", {
   description: "Get the full menu for a restaurant",
-  parameters: { restaurantName: Schema.String },
+  parameters: Schema.Struct({ restaurantName: Schema.String }),
   success: Schema.Struct({
     restaurantName: Schema.String,
     sections: Schema.Array(
@@ -17,10 +17,10 @@ const getMenu = Tool.make("getMenu", {
 
 const getMenuItem = Tool.make("getMenuItem", {
   description: "Get details for a specific menu item",
-  parameters: {
+  parameters: Schema.Struct({
     restaurantName: Schema.String,
     itemName: Schema.String,
-  },
+  }),
   success: Schema.Struct({
     restaurantName: Schema.String,
     name: Schema.String,

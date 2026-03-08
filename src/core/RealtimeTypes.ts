@@ -1,5 +1,5 @@
-import type { AudioFrame } from "./AudioFrame.js";
-import type { PipelineEvent } from "./Events.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import type { PipelineEvent } from "@/core/Events.js";
 
 /**
  * @name RealtimeAction

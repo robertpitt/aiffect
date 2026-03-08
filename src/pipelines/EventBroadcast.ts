@@ -1,7 +1,7 @@
 import { Effect, PubSub, Stream } from "effect";
 import type { Scope } from "effect";
-import type { PipelineEvent } from "../core/Events.js";
-import { PipelineError } from "../core/Errors.js";
+import type { PipelineEvent } from "@/core/Events.js";
+import { PipelineError } from "@/core/Errors.js";
 
 export interface EventBroadcast {
   readonly publish: (event: PipelineEvent) => Effect.Effect<void>;
@@ -19,8 +19,8 @@ export const make: Effect.Effect<EventBroadcast, never, Scope.Scope> = Effect.ge
 
   const publish = (event: PipelineEvent) => Effect.asVoid(PubSub.publish(pubsub, event));
 
-  const subscribe = Stream.fromQueue(subscription).pipe(
-    Stream.catchAll(() => Stream.fail(new PipelineError({ reason: "Event broadcast closed" }))),
+  const subscribe = Stream.fromSubscription(subscription).pipe(
+    Stream.catch(() => Stream.fail(new PipelineError({ reason: "Event broadcast closed" }))),
   );
 
   return { publish, subscribe };

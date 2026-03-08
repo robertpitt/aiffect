@@ -1,10 +1,10 @@
-import { LanguageModel } from "@effect/ai";
+import { LanguageModel } from "effect/unstable/ai";
 import { Layer } from "effect";
-import { Pipeline } from "../core/Pipeline.js";
-import { Transport } from "../core/Transport.js";
-import { STT, TTS } from "../core/Provider.js";
-import { Agent } from "../core/Agent.js";
-import { makeSandwichCore } from "./SandwichCore.js";
+import { Pipeline } from "@/core/Pipeline.js";
+import { Transport } from "@/core/Transport.js";
+import { STT, TTS } from "@/core/Provider.js";
+import { Agent } from "@/core/Agent.js";
+import { makeSandwichCore } from "@/pipelines/SandwichCore.js";
 
 /**
  * Sandwich pipeline: STT -> LLM (Chat + LanguageModel) -> TTS.

@@ -1,21 +1,12 @@
-/**
- * Contract tests for the realtime pipeline: when inbound audio arrives, provider receives frames;
- * tool call triggers dispatch and submitToolOutput; interrupt clears transport.
- */
-
 import { describe, it, expect } from "vitest";
 import { Effect, Fiber, Layer, Queue, Duration } from "effect";
-import { Toolkit } from "@effect/ai";
-import { AudioFrame } from "../src/core/AudioFrame.js";
-import { Pipeline } from "../src/core/Pipeline.js";
-import { make as RealtimePipeline } from "../src/pipelines/Realtime.js";
-import { Agent, defineAgent } from "../src/core/Agent.js";
-import { makeTestTransport } from "../src/test/TestTransport.js";
-import { makeTestRealtime } from "../src/test/TestProvider.js";
+import { Toolkit } from "effect/unstable/ai";
+import { AudioFrame, Pipeline, Agent, defineAgent, RealtimePipeline } from "@/index.js";
+import { testTransport, testRealtime } from "./test-utils.js";
 
 const noopAgent = defineAgent({
   name: "TestAgent",
-  buildPrompt: () => "You are a test agent.",
+  buildPrompt: (_agentContext, _sessionContext) => "You are a test agent.",
   toolkit: Toolkit.empty,
   toolkitLayer: Layer.empty as Layer.Layer<any, never, never>,
 });
@@ -23,21 +14,20 @@ const noopAgent = defineAgent({
 describe("Pipeline contract", () => {
   it("when inbound audio is pushed to transport, provider receives frames", async () => {
     const program = Effect.gen(function* () {
-      const harness = yield* makeTestTransport();
-      const realtimeHarness = yield* makeTestRealtime();
+      const transport = yield* testTransport();
+      const realtime = yield* testRealtime();
 
       const agentLayer = Layer.succeed(Agent, noopAgent);
       const appLayer = RealtimePipeline.pipe(
-        Layer.provide(harness.layer),
-        Layer.provide(realtimeHarness.layer),
+        Layer.provide(transport.layer),
+        Layer.provide(realtime.layer),
         Layer.provide(agentLayer),
-        Layer.provide(Layer.scope),
       );
 
       const run = Effect.scoped(
         Layer.build(appLayer).pipe(
           Effect.flatMap((ctx) =>
-            Effect.fork(
+            Effect.forkChild(
               Effect.gen(function* () {
                 const pipeline = yield* Pipeline;
                 yield* pipeline.run;
@@ -52,7 +42,7 @@ describe("Pipeline contract", () => {
                     channels: 1,
                     timestamp: Date.now(),
                   });
-                  yield* Queue.offer(harness.inboundQueue, frame);
+                  yield* Queue.offer(transport.inboundQueue, frame);
                   yield* Effect.sleep(Duration.millis(200));
                   yield* Fiber.interrupt(fiber);
                 }),
@@ -63,9 +53,9 @@ describe("Pipeline contract", () => {
       );
 
       yield* run;
-      const sent = yield* realtimeHarness.getSentFrames;
+      const sent = yield* realtime.getSentFrames;
       expect(sent.length).toBeGreaterThanOrEqual(1);
-    }).pipe(Effect.catchAll((e) => Effect.log("Contract test error:", e).pipe(Effect.as(void 0))));
+    }).pipe(Effect.catch((e) => Effect.log("Contract test error:", e).pipe(Effect.as(void 0))));
 
     await Effect.runPromise(program);
   });

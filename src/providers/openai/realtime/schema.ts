@@ -2,27 +2,27 @@
  * OpenAI Realtime — schemas as single source of truth. Types derived via Schema.Type.
  */
 
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 
 const SessionCreated = Schema.Struct({ type: Schema.Literal("session.created") });
 const SessionUpdated = Schema.Struct({ type: Schema.Literal("session.updated") });
 const ErrorTo = Schema.Struct({
   type: Schema.Literal("error"),
-  error: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+  error: Schema.Record(Schema.String, Schema.Unknown),
 });
 const ErrorMessage = Schema.Struct({
   type: Schema.Literal("error"),
   error: Schema.optional(Schema.Unknown),
 }).pipe(
-  Schema.transform(ErrorTo, {
-    decode: (fromA) => ({
+  Schema.decodeTo(ErrorTo, {
+    decode: SchemaGetter.transform((fromA: { type: string; error?: unknown }) => ({
       type: "error" as const,
       error: (fromA.error ?? {}) as Record<string, unknown>,
-    }),
-    encode: (_toI, toA): { type: "error"; error: Record<string, unknown> } => ({
-      type: "error",
+    })),
+    encode: SchemaGetter.transform((toA: { type: string; error: Record<string, unknown> }) => ({
+      type: "error" as const,
       error: toA.error,
-    }),
+    })),
   }),
 );
 const ResponseCreated = Schema.Struct({
@@ -120,7 +120,7 @@ const ResponseFunctionCallArgumentsDelta = Schema.Struct({
   delta: Schema.optional(Schema.String),
 });
 
-export const OpenAIServerMessageSchema = Schema.Union(
+export const OpenAIServerMessageSchema = Schema.Union([
   SessionCreated,
   SessionUpdated,
   ErrorMessage,
@@ -144,7 +144,7 @@ export const OpenAIServerMessageSchema = Schema.Union(
   ResponseContentPartDone,
   RateLimitsUpdated,
   ResponseFunctionCallArgumentsDelta,
-);
+]);
 
 export type OpenAIServerMessage = Schema.Schema.Type<typeof OpenAIServerMessageSchema>;
 
@@ -164,9 +164,9 @@ export const OpenAIRealtimeOptionsSchema = Schema.Struct({
   /** If true, buffer inbound audio in a queue until session.updated (and startWithResponseCreate if set) before sending to the API. */
   bufferInputUntilReady: Schema.optional(Schema.Boolean),
   /** Input audio format (pcm16 or ulaw). */
-  inputAudioFormat: Schema.optional(Schema.Literal("pcm16", "ulaw")),
+  inputAudioFormat: Schema.optional(Schema.Literals(["pcm16", "ulaw"])),
   /** Output audio format (pcm16 or ulaw). */
-  outputAudioFormat: Schema.optional(Schema.Literal("pcm16", "ulaw")),
+  outputAudioFormat: Schema.optional(Schema.Literals(["pcm16", "ulaw"])),
   /** Turn detection settings. */
   turnDetection: Schema.optional(TurnDetectionSchema),
   /** Transcription model (e.g. whisper-1). */

@@ -8,10 +8,10 @@
  */
 
 import { Effect, Stream } from "effect";
-import type { RealtimeShape } from "../core/Provider.js";
-import type { PipelineEvent } from "../core/Events.js";
-import { logEvent } from "./EventLogger.js";
-import { trackTokenUsage } from "./UsageMetrics.js";
+import type { RealtimeShape } from "@/core/Provider.js";
+import type { PipelineEvent } from "@/core/Events.js";
+import { logEvent } from "@/observability/EventLogger.js";
+import { trackTokenUsage } from "@/observability/UsageMetrics.js";
 
 function trackUsageFromEvent(event: PipelineEvent): Effect.Effect<void> {
   if (event._tag !== "ResponseCompleted") return Effect.void;

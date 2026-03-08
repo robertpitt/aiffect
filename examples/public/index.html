@@ -71,6 +71,25 @@
         animation: pulse 1s infinite;
       }
 
+      .voice-select-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .voice-select-wrap label {
+        font-size: 0.75rem;
+        color: #71717a;
+      }
+      .voice-select {
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #27272a;
+        background: #18181b;
+        color: #e4e4e7;
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
+
       @keyframes pulse {
         50% {
           opacity: 0.4;
@@ -181,6 +200,11 @@
         <span id="status">Disconnected</span>
       </div>
 
+      <div class="voice-select-wrap">
+        <label for="voiceSelect">Voice</label>
+        <select id="voiceSelect" class="voice-select"></select>
+      </div>
+
       <div class="visualizer-wrap">
         <canvas id="viz"></canvas>
       </div>
@@ -197,7 +221,38 @@
 
     <script>
       const SAMPLE_RATE = 24000;
-      const WS_URL = `ws://${location.host}`;
+      const PROVIDER = "__PROVIDER__";
+      const VOICES = {
+        openai: [
+          { value: "alloy", label: "Alloy" },
+          { value: "echo", label: "Echo" },
+          { value: "fable", label: "Fable" },
+          { value: "onyx", label: "Onyx" },
+          { value: "nova", label: "Nova" },
+          { value: "shimmer", label: "Shimmer" },
+        ],
+        gemini: [
+          { value: "Puck", label: "Puck" },
+          { value: "Aoede", label: "Aoede" },
+          { value: "Fenrir", label: "Fenrir" },
+          { value: "Charon", label: "Charon" },
+          { value: "Kore", label: "Kore" },
+          { value: "Zephyr", label: "Zephyr" },
+        ],
+      };
+      const voiceSelect = document.getElementById("voiceSelect");
+      VOICES[PROVIDER]?.forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = v.value;
+        opt.textContent = v.label;
+        voiceSelect.appendChild(opt);
+      });
+      const getWsUrl = () => {
+        const voice = voiceSelect.value;
+        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        const base = `${protocol}//${location.host}`;
+        return voice ? `${base}?voice=${encodeURIComponent(voice)}` : base;
+      };
 
       let ws = null;
       let audioCtx = null;
@@ -392,11 +447,12 @@ registerProcessor("playback-processor", PlaybackProcessor);
         setStatus("Connecting…", "connecting");
         connectBtn.disabled = true;
 
-        ws = new WebSocket(WS_URL);
+        ws = new WebSocket(getWsUrl());
         ws.binaryType = "arraybuffer";
 
         ws.onopen = async () => {
           setStatus("Connected — requesting mic…", "connecting");
+          voiceSelect.disabled = true;
           try {
             await startCapture();
             setStatus("Connected", "connected");
@@ -443,6 +499,7 @@ registerProcessor("playback-processor", PlaybackProcessor);
       function cleanup() {
         connectBtn.disabled = false;
         disconnectBtn.disabled = true;
+        voiceSelect.disabled = false;
         dot.className = "status-dot";
         if (micStream) {
           micStream.getTracks().forEach((t) => t.stop());

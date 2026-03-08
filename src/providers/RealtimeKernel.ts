@@ -6,17 +6,19 @@
 
 import { Effect, Layer, Option, Queue, Ref, Stream } from "effect";
 import type { Schema, Scope } from "effect";
-import type { AudioFrame } from "../core/AudioFrame.js";
-import type { PipelineEvent } from "../core/Events.js";
-import type { AgentContext, AgentSpec } from "../core/Agent.js";
-import { Agent } from "../core/Agent.js";
-import { ProviderError } from "../core/Errors.js";
-import { Realtime } from "../core/Provider.js";
-import type { RealtimeAction } from "../core/RealtimeTypes.js";
-import { SessionContext, makeSessionContext } from "../core/SessionContext.js";
-import { decodeAtBoundary, type MessageSocket } from "../internal/MessageSocket.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import type { PipelineEvent } from "@/core/Events.js";
+import type { AgentContextShape } from "@/core/AgentContext.js";
+import { AgentContext, makeAgentContext } from "@/core/AgentContext.js";
+import type { AgentSpec } from "@/core/Agent.js";
+import { Agent } from "@/core/Agent.js";
+import { ProviderError } from "@/core/Errors.js";
+import { Realtime } from "@/core/Provider.js";
+import type { RealtimeAction } from "@/core/RealtimeTypes.js";
+import { SessionContext, makeSessionContext } from "@/core/SessionContext.js";
+import { decodeAtBoundary, type MessageSocket } from "@/internal/MessageSocket.js";
 
-export type { MessageSocket } from "../internal/MessageSocket.js";
+export type { MessageSocket } from "@/internal/MessageSocket.js";
 
 /** Default no-op for onSessionReady. Adapters override when needed. */
 export const defaultOnSessionReady = (): Effect.Effect<void, ProviderError> =>
@@ -37,7 +39,7 @@ export interface KernelInterruptCtx<State> {
 export interface RealtimeAdapter<Msg, State> {
   readonly name: string;
   readonly initialState: State;
-  readonly schema: Schema.Schema<Msg, any, never>;
+  readonly schema: Schema.Top & { readonly Type: Msg };
 
   /**
    * Establish a connection and return a MessageSocket for JSON message exchange.
@@ -46,7 +48,8 @@ export interface RealtimeAdapter<Msg, State> {
    */
   readonly connect: (
     agent: AgentSpec,
-    ctx: AgentContext,
+    agentContext: AgentContextShape,
+    sessionContext: import("@/core/SessionContext.js").SessionContextShape,
   ) => Effect.Effect<MessageSocket, ProviderError, Scope.Scope>;
 
   /** Pure message handler: decoded message + state -> actions + next state. */
@@ -91,17 +94,18 @@ export interface RealtimeAdapter<Msg, State> {
 
 function makeRealtimeFromAdapter<Msg, State>(
   adapter: RealtimeAdapter<Msg, State>,
-): Effect.Effect<Realtime["Type"], ProviderError, Scope.Scope | Agent | SessionContext> {
+): Effect.Effect<
+  Realtime["Service"],
+  ProviderError,
+  Agent | AgentContext | Scope.Scope | SessionContext
+> {
   return Effect.gen(function* () {
     const agent = yield* Agent;
-    const { sessionId } = yield* SessionContext;
-    const agentContext: AgentContext = {
-      sessionId,
-      metadata: {},
-    };
+    const agentContext = yield* AgentContext;
+    const sessionContext = yield* SessionContext;
 
     const socket = yield* adapter
-      .connect(agent, agentContext)
+      .connect(agent, agentContext, sessionContext)
       .pipe(Effect.withSpan(`${adapter.name.toLowerCase()}.connect`));
     yield* Effect.log(`${adapter.name} connected`);
 
@@ -130,9 +134,9 @@ function makeRealtimeFromAdapter<Msg, State>(
             }
             if (sendBuffer) {
               yield* Ref.set(readyRef, true);
-              yield* Effect.fork(
+              yield* Effect.forkChild(
                 Stream.fromQueue(sendBuffer).pipe(
-                  Stream.catchAll(() => Stream.empty),
+                  Stream.catch(() => Stream.empty),
                   Stream.mapEffect((frame) =>
                     socket.send(adapter.encodeSend(frame)),
                   ),
@@ -163,7 +167,7 @@ function makeRealtimeFromAdapter<Msg, State>(
         if (Option.isNone(decoded)) return;
         const msg = decoded.value;
         const state = yield* Ref.get(stateRef);
-        const { actions, nextState } = adapter.handler(msg, state);
+        const { actions, nextState } = adapter.handler(msg as Msg, state);
         yield* Ref.set(stateRef, nextState);
         for (const a of actions) {
           yield* dispatch(a);
@@ -171,7 +175,7 @@ function makeRealtimeFromAdapter<Msg, State>(
       }),
     );
 
-    yield* Effect.fork(messageLoop);
+    yield* Effect.forkChild(messageLoop);
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
@@ -181,7 +185,7 @@ function makeRealtimeFromAdapter<Msg, State>(
       }),
     );
 
-    const send: Realtime["Type"]["send"] = adapter.bufferSendUntilReady
+    const send: Realtime["Service"]["send"] = adapter.bufferSendUntilReady
       ? (frame) =>
           Ref.get(readyRef).pipe(
             Effect.flatMap((ready) =>
@@ -192,8 +196,8 @@ function makeRealtimeFromAdapter<Msg, State>(
           )
       : (frame) => socket.send(adapter.encodeSend(frame));
 
-    const receive: Realtime["Type"]["receive"] = Stream.fromQueue(audioQueue).pipe(
-      Stream.catchAll(() =>
+    const receive: Realtime["Service"]["receive"] = Stream.fromQueue(audioQueue).pipe(
+      Stream.catch(() =>
         Stream.fail(
           new ProviderError({
             provider: adapter.name,
@@ -203,8 +207,8 @@ function makeRealtimeFromAdapter<Msg, State>(
       ),
     );
 
-    const events: Realtime["Type"]["events"] = Stream.fromQueue(eventQueue).pipe(
-      Stream.catchAll(() =>
+    const events: Realtime["Service"]["events"] = Stream.fromQueue(eventQueue).pipe(
+      Stream.catch(() =>
         Stream.fail(
           new ProviderError({
             provider: adapter.name,
@@ -214,18 +218,18 @@ function makeRealtimeFromAdapter<Msg, State>(
       ),
     );
 
-    const interrupt: Realtime["Type"]["interrupt"] = (playedAudioMs) =>
+    const interrupt: Realtime["Service"]["interrupt"] = (playedAudioMs) =>
       adapter
         .onInterrupt({ socket, stateRef, audioQueue, eventQueue, playedAudioMs })
         .pipe(Effect.tap(() => Effect.log(`${adapter.name} interrupt`)));
 
-    const submitToolOutput: Realtime["Type"]["submitToolOutput"] = (
+    const submitToolOutput: Realtime["Service"]["submitToolOutput"] = (
       callId,
       name,
       output,
     ) => socket.send(adapter.encodeToolOutput(callId, name, output));
 
-    const requestResponse: Realtime["Type"]["requestResponse"] = () => {
+    const requestResponse: Realtime["Service"]["requestResponse"] = () => {
       if (adapter.encodeRequestResponse) {
         const msg = adapter.encodeRequestResponse();
         if (msg) return socket.send(msg);
@@ -246,15 +250,31 @@ function makeRealtimeFromAdapter<Msg, State>(
       requestResponse,
       requiresExplicitRequestResponse,
     };
-  }).pipe(Effect.withSpan(`${adapter.name.toLowerCase()}.provider`));
+  }).pipe(
+    Effect.withSpan(`${adapter.name.toLowerCase()}.provider`),
+  ) as Effect.Effect<
+    Realtime["Service"],
+    ProviderError,
+    Agent | AgentContext | Scope.Scope | SessionContext
+  >;
 }
 
-const DefaultSessionContext = makeSessionContext({ sessionId: crypto.randomUUID() });
+/** Default context layers for standalone provider use (e.g. tests). Session.run provides its own. */
+export const DefaultSessionContext = makeSessionContext({ sessionId: crypto.randomUUID() });
+export const DefaultAgentContext = makeAgentContext({});
 
 export function makeRealtimeLayer<Msg, State>(
   adapter: RealtimeAdapter<Msg, State>,
-): Layer.Layer<Realtime, ProviderError, Scope.Scope | Agent> {
-  return Layer.scoped(Realtime, makeRealtimeFromAdapter(adapter)).pipe(
-    Layer.provideMerge(DefaultSessionContext),
-  ) as Layer.Layer<Realtime, ProviderError, Scope.Scope | Agent>;
+): Layer.Layer<
+  Realtime,
+  ProviderError,
+  Scope.Scope | Agent | SessionContext | AgentContext
+> {
+  return Layer.effect(Realtime)(
+    makeRealtimeFromAdapter(adapter) as unknown as Effect.Effect<
+      Realtime["Service"],
+      ProviderError,
+      Agent | AgentContext | Scope.Scope | SessionContext
+    >,
+  );
 }

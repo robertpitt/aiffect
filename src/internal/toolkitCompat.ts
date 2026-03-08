@@ -1,4 +1,4 @@
-import type { Toolkit, Tool } from "@effect/ai";
+import type { Toolkit, Tool } from "effect/unstable/ai";
 import type { Effect } from "effect";
 
 /**

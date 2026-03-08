@@ -1,11 +1,11 @@
-import { Tool, Toolkit } from "@effect/ai";
+import { Tool, Toolkit } from "effect/unstable/ai";
 import { Effect, Schema } from "effect";
-import { ServerContext } from "../../../src/core/ServerContext.js";
+import { ServerContext } from "@/core/ServerContext.js";
 import type { SampleServerContextShape } from "../ServerContext.js";
 
 const getResturant = Tool.make("getResturant", {
   description: "Get a restaurant by name",
-  parameters: { name: Schema.String },
+  parameters: Schema.Struct({ name: Schema.String }),
   success: Schema.Struct({
     name: Schema.String,
     address: Schema.String,

@@ -16,9 +16,9 @@ Abstractions and types that define the voice pipeline: **Transport**, **Provider
 | **Errors.ts** | `TransportError`, `ProviderError`, `PipelineError`, `ConfigError`, `AgentError`; `toPipelineError()`. |
 | **AudioFrame.ts** | `AudioFrame` type (samples, sampleRate, channels, timestamp). |
 | **AudioTransform.ts** | `RealtimeAudioConfig` for input/output transforms (e.g. resampling). |
-| **SessionContext.ts** | `SessionContext` (sessionId, metadata); `makeSessionContext`, `getSession`. |
-| **ServerContext.ts** | `ServerContext` shape for server-wide context. |
-| **AgentRegistry.ts** | `AgentRegistry`, `makeAgentRegistry` for multi-agent lookup. |
+| **SessionContext.ts** | `SessionContext` (sessionId, connectionId, metadata) — observability anchor for transcripts, traces, usage, logs. |
+| **ServerContext.ts** | `ServerContext` — global services (repositories, SDKs, config). |
+| **AgentContext.ts** | `AgentContext` — per-spawn agent config (prompt settings, client details, menu ids, metadata). |
 | **RealtimeTypes.ts** | Shared types used by realtime providers. |
 | **utils.ts** | Internal utilities. |
 
@@ -45,9 +45,11 @@ Agent
   └── provides: Agent { name, buildPrompt, toolkit, toolkitLayer, handleToolCall }
 ```
 
-Session composition (see `Session.ts`) resolves the agent, builds `SessionContext`, then composes:
+Session composition (see `Session.ts`) resolves the agent, builds `SessionContext` and `AgentContext`, then composes:
 
-`pipeline ← transport ← provider ← agent ← sessionContext ← scope`.
+`pipeline ← transport ← provider ← agent ← sessionContext ← agentContext ← scope`.
+
+When tools use `ServerContext`, pass `serverContext` in Session options.
 
 ---
 

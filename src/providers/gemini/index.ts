@@ -1,2 +1,2 @@
-export { make as realtime } from "./realtime/flow.js";
-export type { GeminiRealtimeOptions } from "./realtime/schema.js";
+export { make as realtime } from "@/providers/gemini/realtime/flow.js";
+export type { GeminiRealtimeOptions } from "@/providers/gemini/realtime/schema.js";

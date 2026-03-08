@@ -1,11 +1,11 @@
 import { Effect } from "effect";
-import type { ToolCallStarted, ToolCallCompleted } from "../core/Events.js";
+import type { ToolCallStarted, ToolCallCompleted } from "@/core/Events.js";
 import {
   ToolCallCompleted as ToolCallCompletedCtor,
   ToolCallError as ToolCallErrorCtor,
-} from "../core/Events.js";
-import type { AgentSpec } from "../core/Agent.js";
-import type { AgentError } from "../core/Errors.js";
+} from "@/core/Events.js";
+import type { AgentSpec } from "@/core/Agent.js";
+import type { AgentError } from "@/core/Errors.js";
 
 /**
  * Execute a single tool call via the agent's handleToolCall with span instrumentation.
@@ -39,7 +39,7 @@ export const dispatch = (
     Effect.withSpan(`tool.execute/${event.name}`, {
       attributes: { "tool.name": event.name, "tool.callId": event.callId },
     }),
-    Effect.catchAll((err: AgentError) =>
+    Effect.catch((err: AgentError) =>
       Effect.succeed(
         new ToolCallCompletedCtor({
           callId: event.callId,

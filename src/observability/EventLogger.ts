@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { PipelineEvent } from "../core/Events.js";
+import type { PipelineEvent } from "@/core/Events.js";
 
 /**
  * Returns an Effect that logs a pipeline event with structured attributes.

@@ -13,8 +13,8 @@ Use these for typical voice sessions.
 | **Session.run(options)** | Run a voice session. Composes pipeline, provider, transport, and agent; runs until the connection ends. Returns `Effect<void, PipelineError \| ConfigError \| ProviderError>`. |
 | **Session.runWithEvents(options, fn)** | Same as above but calls `fn({ fiber, events })` inside the session scope so you can subscribe to the event stream or join/interrupt the fiber. |
 | **defineAgent(params)** | Build an agent from `name`, `buildPrompt`, `toolkit`, and `toolkitLayer`. Derives `handleToolCall` automatically. Prefer over constructing `AgentSpec` by hand. |
-| **OpenAI.realtime(options?)** | Layer for OpenAI Realtime API. Options: `voice`, `model`, `inputAudioFormat`, `outputAudioFormat`, `turnDetection`, etc. |
-| **Gemini.realtime(options?)** | Layer for Gemini Live API. |
+| **OpenAI.realtime(options?)** | Layer for OpenAI Realtime API. Options act as defaults; override per-session via `session.providerOptions`. Options: `voice`, `model`, `inputAudioFormat`, `outputAudioFormat`, `turnDetection`, etc. |
+| **Gemini.realtime(options?)** | Layer for Gemini Live API. Options act as defaults; override per-session via `session.providerOptions`. |
 | **WebSocketTransport(ws, options?)** | Transport layer from a WebSocket. Options: `sampleRate`, `channels`, `pingIntervalMs`, `queueCapacity`, `queueDropStrategy`. |
 
 **Session options**
@@ -24,6 +24,9 @@ Use these for typical voice sessions.
 - **provider** — Layer for the AI provider (e.g. `OpenAI.realtime({ voice: "alloy" })`).
 - **transport** — Layer for audio transport (e.g. `WebSocketTransport(ws)`).
 - **pipeline** — Optional. Defaults to `RealtimePipeline`. Use `SandwichPipeline` or `SandwichBargeInPipeline(config?)` for STT→LLM→TTS.
+- **session** — Optional. `{ sessionId?, connectionId?, metadata?, providerOptions? }` — observability anchor for transcripts, traces, usage, logs. `providerOptions` are per-session overrides merged over base options from `OpenAI.realtime(...)` / `Gemini.realtime(...)`. Example: `session: { providerOptions: { voice: "shimmer" } }` overrides the default voice for that session.
+- **agentContext** — Optional. Per-spawn agent config (prompt settings, client details, menu ids, etc.).
+- **serverContext** — Optional. Layer for global services (repositories, SDKs). Required when tools use `ServerContext`.
 
 ---
 
@@ -53,7 +56,7 @@ Use when building a custom provider, transport, or pipeline.
 | **Custom transport** | `Transport`, `TransportShape`, `AudioFrame` | [CUSTOM_TRANSPORT.md](./CUSTOM_TRANSPORT.md) |
 | **Custom pipeline** | `Pipeline`, `createPipeline`, `PipelineShape`, `PipelineRequirements` | [src/core/README.md](../src/core/README.md), [src/pipelines/README.md](../src/pipelines/README.md) |
 | **Audio** | `RealtimeAudioConfig`, `RealtimeAudioConfigLive`, `AudioTransform`, `identityTransform` | Core audio transform for input/output (e.g. resampling). |
-| **Context** | `SessionContext`, `makeSessionContext`, `getSession`, `ServerContext`, `AgentRegistry`, `makeAgentRegistry` | Session and server context for tools and agents. |
+| **Context** | `SessionContext`, `makeSessionContext`, `getSession`, `ServerContext`, `AgentContext`, `makeAgentContext`, `getAgentContext` | Session (observability anchor), server (global services), and agent (per-spawn config) context. |
 | **Errors** | `TransportError`, `ProviderError`, `PipelineError`, `ConfigError`, `AgentError`, `toPipelineError` | Tagged errors; use `toPipelineError` in custom pipelines for consistent wrapping. |
 | **Observability** | `instrumentRealtime`, `makeEventBroadcast`, `inputTokensCounter`, `outputTokensCounter`, `trackTokenUsage` | Instrumentation and token metrics. |
 

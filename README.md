@@ -58,7 +58,7 @@ Orchestrates the voice loop: routes audio between Transport and Provider, handle
 
 A portable definition: **prompt** + **toolkit**. The same agent runs on any provider or pipeline.
 
-- **buildPrompt(ctx)** — Returns the system prompt. `ctx` has `sessionId` and `metadata`.
+- **buildPrompt(agentContext, sessionContext)** — Returns the system prompt. `agentContext` has per-spawn config; `sessionContext` has `sessionId` (observability anchor).
 - **toolkit** — `@effect/ai` Toolkit (tools the model can call).
 - **toolkitLayer** — Effect Layer that provides the tool implementations.
 
@@ -141,9 +141,9 @@ wss.on("connection", (ws) => {
 1. **Run the example**:
 
 ```bash
-OPENAI_API_KEY=sk-... npx tsx examples/multi-agent-toolkits.ts
+OPENAI_API_KEY=sk-... npx tsx examples/voice-concierge.ts
 # Or with Gemini:
-REALTIME_PROVIDER=gemini GEMINI_API_KEY=... npx tsx examples/multi-agent-toolkits.ts
+REALTIME_PROVIDER=gemini GEMINI_API_KEY=... npx tsx examples/voice-concierge.ts
 ```
 
 ---
@@ -155,9 +155,10 @@ REALTIME_PROVIDER=gemini GEMINI_API_KEY=... npx tsx examples/multi-agent-toolkit
 | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | **agent**                | Agent to use directly. Mutually exclusive with `agentId` + `agents`.                                           |
 | **agentId** + **agents** | Resolve agent by id from a record. Use for multi-agent routing.                                                |
-| **provider**             | Layer for the AI provider (e.g. `OpenAI.realtime()`, `Gemini.realtime()`).                                     |
+| **provider**             | Layer for the AI provider (e.g. `OpenAI.realtime()`, `Gemini.realtime()`). Options act as defaults; override per-session via `session.providerOptions`. |
 | **transport**            | Layer for audio transport (e.g. `WebSocketTransport(ws)`).                                                     |
 | **pipeline**             | Optional. Defaults to `RealtimePipeline`. Use `SandwichPipeline` or `SandwichBargeInPipeline` for STT→LLM→TTS. |
+| **session**              | Optional. `{ sessionId?, connectionId?, metadata?, providerOptions? }`. `providerOptions` overrides provider base options per-session. |
 
 
 ---
@@ -212,7 +213,7 @@ Same as Sandwich but with energy-based barge-in: the pipeline monitors inbound a
 | **src/internal/** | Internal helpers (audio, toolkit compat, MessageSocket) — [README](src/internal/README.md) |
 | **src/test/** | Test doubles (TestTransport, TestProvider) |
 | **docs/** | API tiers, client contract, custom provider/transport guides — [README](docs/README.md) |
-| **examples/** | Runnable examples (multi-agent, trace exporter) — [README](examples/README.md) |
+| **examples/** | Production-grade voice concierge (agent + tools), trace exporter — [README](examples/README.md) |
 | **sample/** | Sample agents and toolkits — [README](sample/README.md) |
 | **tests/** | Pipeline contract tests — [README](tests/README.md) |
 
@@ -226,7 +227,7 @@ See [PROTOCOL.md](PROTOCOL.md) for detailed data flow and wire formats. Design n
 npm run check   # tsc --noEmit
 npm run format  # oxfmt
 npm run lint    # oxlint src/
-npm run example # tsx examples/multi-agent-toolkits.ts
+npm run example # tsx examples/voice-concierge.ts
 npm test        # vitest run
 ```
 

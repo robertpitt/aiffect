@@ -4,23 +4,26 @@
 
 import { Config, Effect, Queue, Redacted } from "effect";
 import WS from "ws";
-import type { AgentContext, AgentSpec } from "../../../core/Agent.js";
-import { ProviderError } from "../../../core/Errors.js";
-import { Interrupted } from "../../../core/Events.js";
-import { serializeToolOutput } from "../../../internal/serializeToolOutput.js";
-import { make as makeMessageSocket } from "../../../internal/MessageSocket.js";
+import type { AgentContextShape } from "@/core/AgentContext.js";
+import type { SessionContextShape } from "@/core/SessionContext.js";
+import type { AgentSpec } from "@/core/Agent.js";
+import { ProviderError } from "@/core/Errors.js";
+import { Interrupted } from "@/core/Events.js";
+import { mergeProviderOptions } from "@/internal/mergeProviderOptions.js";
+import { serializeToolOutput } from "@/internal/serializeToolOutput.js";
+import { make as makeMessageSocket } from "@/internal/MessageSocket.js";
 import {
   makeRealtimeLayer,
   type RealtimeAdapter,
-} from "../../RealtimeKernel.js";
-import { handleGeminiMessage } from "./handler.js";
+} from "@/providers/RealtimeKernel.js";
+import { handleGeminiMessage } from "@/providers/gemini/realtime/handler.js";
 import {
   GeminiServerMessageSchema,
   initialGeminiHandlerState,
   type GeminiRealtimeOptions,
   type GeminiServerMessage,
   type GeminiHandlerState,
-} from "./schema.js";
+} from "@/providers/gemini/realtime/schema.js";
 
 const GEMINI_LIVE_WS_URL =
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
@@ -58,10 +61,11 @@ function sanitizeParametersForGemini(
 
 function buildSessionSetup(
   agent: AgentSpec,
-  context: AgentContext,
+  agentContext: AgentContextShape,
+  sessionContext: SessionContextShape,
   options?: GeminiRealtimeOptions,
 ) {
-  const systemPrompt = agent.buildPrompt(context);
+  const systemPrompt = agent.buildPrompt(agentContext, sessionContext);
   const model = options?.model ?? DEFAULT_MODEL;
   const voice = options?.voice ?? "Puck";
   const modelName = model.startsWith("models/") ? model : `models/${model}`;
@@ -104,10 +108,18 @@ function geminiAdapter(
     initialState: initialGeminiHandlerState,
     schema: GeminiServerMessageSchema,
 
-    connect: (agent, ctx) =>
+    connect: (agent, agentContext, sessionContext) =>
       Effect.gen(function* () {
-        const apiKey = yield* Config.redacted("GEMINI_API_KEY").pipe(
-          Effect.orElse(() => Config.redacted("GOOGLE_API_KEY")),
+        const effectiveOptions = mergeProviderOptions(
+          (options ?? {}) as Record<string, unknown>,
+          sessionContext.providerOptions,
+        ) as GeminiRealtimeOptions;
+        const apiKey = yield* Effect.gen(function* () {
+          return yield* Config.redacted("GEMINI_API_KEY");
+        }).pipe(
+          Effect.catch(() => Effect.gen(function* () {
+            return yield* Config.redacted("GOOGLE_API_KEY");
+          })),
           Effect.mapError(
             (e) =>
               new ProviderError({
@@ -119,8 +131,8 @@ function geminiAdapter(
           ),
         );
         const url = `${GEMINI_LIVE_WS_URL}?key=${encodeURIComponent(Redacted.value(apiKey))}`;
-        const ws = yield* Effect.async<InstanceType<typeof WS>, ProviderError>(
-          (resume) => {
+        const ws = yield* Effect.callback<InstanceType<typeof WS>, ProviderError>(
+          (resume, _signal) => {
             const socket = new WS(url);
             socket.on("open", () => resume(Effect.succeed(socket)));
             socket.on("error", (err) =>
@@ -137,7 +149,9 @@ function geminiAdapter(
           },
         );
         ws.send(
-          JSON.stringify({ setup: buildSessionSetup(agent, ctx, options) }),
+          JSON.stringify({
+            setup: buildSessionSetup(agent, agentContext, sessionContext, effectiveOptions),
+          }),
         );
         return yield* makeMessageSocket(ws as any, { provider: "Gemini" });
       }),

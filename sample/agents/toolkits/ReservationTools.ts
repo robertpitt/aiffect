@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
-import { Tool, Toolkit } from "@effect/ai";
-import { ServerContext } from "../../../src/core/ServerContext.js";
-import { SessionContext } from "../../../src/core/SessionContext.js";
+import { Tool, Toolkit } from "effect/unstable/ai";
+import { ServerContext } from "@/core/ServerContext.js";
+import { SessionContext } from "@/core/SessionContext.js";
 import type { SampleServerContextShape } from "../ServerContext.js";
 
 const reservationSuccess = Schema.Struct({
@@ -16,23 +16,23 @@ const reservationSuccess = Schema.Struct({
 
 const createReservation = Tool.make("createReservation", {
   description: "Create a table reservation at a restaurant",
-  parameters: {
+  parameters: Schema.Struct({
     restaurantName: Schema.String,
     date: Schema.String,
     time: Schema.String,
     partySize: Schema.Number,
     guestName: Schema.String,
-  },
+  }),
   success: reservationSuccess,
   dependencies: [ServerContext, SessionContext],
 });
 
 const listReservations = Tool.make("listReservations", {
   description: "List reservations for a guest or restaurant",
-  parameters: {
+  parameters: Schema.Struct({
     guestName: Schema.optional(Schema.String),
     restaurantName: Schema.optional(Schema.String),
-  },
+  }),
   success: Schema.Struct({
     reservations: Schema.Array(reservationSuccess),
   }),

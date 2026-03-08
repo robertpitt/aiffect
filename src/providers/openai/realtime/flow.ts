@@ -4,32 +4,36 @@
 
 import { Config, Effect, Queue, Redacted, Ref } from "effect";
 import WS from "ws";
-import type { AgentContext, AgentSpec } from "../../../core/Agent.js";
-import { ProviderError } from "../../../core/Errors.js";
-import { Interrupted } from "../../../core/Events.js";
-import { serializeToolOutput } from "../../../internal/serializeToolOutput.js";
-import { make as makeMessageSocket } from "../../../internal/MessageSocket.js";
+import type { AgentContextShape } from "@/core/AgentContext.js";
+import type { SessionContextShape } from "@/core/SessionContext.js";
+import type { AgentSpec } from "@/core/Agent.js";
+import { ProviderError } from "@/core/Errors.js";
+import { Interrupted } from "@/core/Events.js";
+import { mergeProviderOptions } from "@/internal/mergeProviderOptions.js";
+import { serializeToolOutput } from "@/internal/serializeToolOutput.js";
+import { make as makeMessageSocket } from "@/internal/MessageSocket.js";
 import {
   makeRealtimeLayer,
   type RealtimeAdapter,
-} from "../../RealtimeKernel.js";
-import { handleOpenAIMessage } from "./handler.js";
+} from "@/providers/RealtimeKernel.js";
+import { handleOpenAIMessage } from "@/providers/openai/realtime/handler.js";
 import {
   OpenAIServerMessageSchema,
   initialOpenAIHandlerState,
   type OpenAIRealtimeOptions,
   type OpenAIServerMessage,
   type OpenAIHandlerState,
-} from "./schema.js";
+} from "@/providers/openai/realtime/schema.js";
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
 
 function buildSessionUpdate(
   agent: AgentSpec,
-  context: AgentContext,
+  agentContext: AgentContextShape,
+  sessionContext: SessionContextShape,
   options?: OpenAIRealtimeOptions,
 ): Record<string, unknown> {
-  const systemPrompt = agent.buildPrompt(context);
+  const systemPrompt = agent.buildPrompt(agentContext, sessionContext);
   const voice = options?.voice ?? "alloy";
   const tools = Object.values(agent.toolkit.tools).map((tool) => {
     const t = tool as {
@@ -102,11 +106,17 @@ function openAIAdapter(
     schema: OpenAIServerMessageSchema,
     bufferSendUntilReady: options?.bufferInputUntilReady === true,
 
-    connect: (agent, ctx) =>
+    connect: (agent, agentContext, sessionContext) =>
       Effect.gen(function* () {
-        const apiKey = yield* Config.redacted("OPENAI_API_KEY").pipe(
+        const effectiveOptions = mergeProviderOptions(
+          (options ?? {}) as Record<string, unknown>,
+          sessionContext.providerOptions,
+        ) as OpenAIRealtimeOptions;
+        const apiKey = yield* Effect.gen(function* () {
+          return yield* Config.redacted("OPENAI_API_KEY");
+        }).pipe(
           Effect.mapError(
-            (e) =>
+            (e: unknown) =>
               new ProviderError({
                 provider: "OpenAI",
                 reason: "Missing or invalid OPENAI_API_KEY",
@@ -114,8 +124,8 @@ function openAIAdapter(
               }),
           ),
         );
-        const model = options?.model ?? "gpt-4o-realtime-preview";
-        const ws = yield* Effect.async<InstanceType<typeof WS>, ProviderError>((resume) => {
+        const model = effectiveOptions?.model ?? "gpt-4o-realtime-preview";
+        const ws = yield* Effect.callback<InstanceType<typeof WS>, ProviderError>((resume, _signal) => {
           const socket = new WS(`${OPENAI_REALTIME_URL}?model=${model}`, {
             headers: {
               Authorization: `Bearer ${Redacted.value(apiKey)}`,
@@ -135,7 +145,7 @@ function openAIAdapter(
             ),
           );
         });
-        ws.send(JSON.stringify(buildSessionUpdate(agent, ctx, options)));
+        ws.send(JSON.stringify(buildSessionUpdate(agent, agentContext, sessionContext, effectiveOptions)));
         return yield* makeMessageSocket(ws as any, { provider: "OpenAI" });
       }),
 

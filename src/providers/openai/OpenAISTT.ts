@@ -1,9 +1,9 @@
 import { Config, Effect, Layer, Redacted, Stream } from "effect";
-import { STT } from "../../core/Provider.js";
-import { ProviderError } from "../../core/Errors.js";
-import { TranscriptDelta } from "../../core/Events.js";
-import type { AudioFrame } from "../../core/AudioFrame.js";
-import { pcm16Rms } from "../../internal/audio.js";
+import { STT } from "@/core/Provider.js";
+import { ProviderError } from "@/core/Errors.js";
+import { TranscriptDelta } from "@/core/Events.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import { pcm16Rms } from "@/internal/audio.js";
 
 const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -79,10 +79,10 @@ export const make = (options?: OpenAISTTOptions) =>
       const minSpeechMs = options?.minSpeechMs ?? 200;
       const energyThreshold = options?.energyThreshold ?? 0.01;
 
-      const transcribe: STT["Type"]["transcribe"] = (audio) =>
+      const transcribe: STT["Service"]["transcribe"] = (audio) =>
         audio.pipe(
           Stream.mapAccum<VadState, AudioFrame, readonly AudioFrame[] | null>(
-            INITIAL_VAD,
+            () => INITIAL_VAD,
             (state, frame) => {
               const energy = pcm16Rms(frame.samples);
               const ts = frame.timestamp;
@@ -93,14 +93,14 @@ export const make = (options?: OpenAISTTOptions) =>
                   if (loud) {
                     return [
                       { phase: "speech", buffer: [frame], speechStartTs: ts, silenceStartTs: 0 },
-                      null,
-                    ];
+                      [null],
+                    ] as const;
                   }
-                  return [state, null];
+                  return [state, [null]] as const;
 
                 case "speech":
                   if (loud) {
-                    return [{ ...state, buffer: [...state.buffer, frame] }, null];
+                    return [{ ...state, buffer: [...state.buffer, frame] }, [null]] as const;
                   }
                   return [
                     {
@@ -109,8 +109,8 @@ export const make = (options?: OpenAISTTOptions) =>
                       buffer: [...state.buffer, frame],
                       silenceStartTs: ts,
                     },
-                    null,
-                  ];
+                    [null],
+                  ] as const;
 
                 case "trailing": {
                   if (loud) {
@@ -121,15 +121,15 @@ export const make = (options?: OpenAISTTOptions) =>
                         buffer: [...state.buffer, frame],
                         silenceStartTs: 0,
                       },
-                      null,
-                    ];
+                      [null],
+                    ] as const;
                   }
                   const silenceDur = ts - state.silenceStartTs;
                   const speechDur = state.silenceStartTs - state.speechStartTs;
                   if (silenceDur >= silenceMs && speechDur >= minSpeechMs) {
-                    return [INITIAL_VAD, state.buffer];
+                    return [INITIAL_VAD, [state.buffer]] as const;
                   }
-                  return [{ ...state, buffer: [...state.buffer, frame] }, null];
+                  return [{ ...state, buffer: [...state.buffer, frame] }, [null]] as const;
                 }
               }
             },

@@ -1,7 +1,7 @@
-import { Context, Layer } from "effect";
+import { Layer, ServiceMap } from "effect";
 import type { Stream } from "effect";
-import type { AudioFrame } from "./AudioFrame.js";
-import type { ProviderError } from "./Errors.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import type { ProviderError } from "@/core/Errors.js";
 
 export type AudioTransform = <E>(
   stream: Stream.Stream<AudioFrame, E>,
@@ -19,10 +19,10 @@ export const defaultRealtimeAudioConfig: RealtimeAudioConfigShape = {
   outputTransform: identityTransform,
 };
 
-export class RealtimeAudioConfig extends Context.Tag("@aiffect/RealtimeAudioConfig")<
+export class RealtimeAudioConfig extends ServiceMap.Service<
   RealtimeAudioConfig,
   RealtimeAudioConfigShape
->() {}
+>()("@aiffect/RealtimeAudioConfig") {}
 
 export const RealtimeAudioConfigLive = Layer.succeed(
   RealtimeAudioConfig,

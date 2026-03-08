@@ -1,7 +1,7 @@
-import { Context, Effect, Stream } from "effect";
-import type { AudioFrame } from "./AudioFrame.js";
-import type { TranscriptDelta, PipelineEvent } from "./Events.js";
-import type { ProviderError } from "./Errors.js";
+import { Effect, ServiceMap, Stream } from "effect";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import type { TranscriptDelta, PipelineEvent } from "@/core/Events.js";
+import type { ProviderError } from "@/core/Errors.js";
 
 /**
  * @name RealtimeShape
@@ -59,7 +59,7 @@ export interface RealtimeShape {
  * @name Realtime
  * @description The realtime context that will be used to run the realtime provider.
  */
-export class Realtime extends Context.Tag("@aiffect/Realtime")<Realtime, RealtimeShape>() {}
+export class Realtime extends ServiceMap.Service<Realtime, RealtimeShape>()("@aiffect/Realtime") {}
 
 /**
  * @name STTShape
@@ -75,7 +75,7 @@ export interface STTShape {
  * @name STT
  * @description The stt context that will be used to run the stt provider.
  */
-export class STT extends Context.Tag("@aiffect/STT")<STT, STTShape>() {}
+export class STT extends ServiceMap.Service<STT, STTShape>()("@aiffect/STT") {}
 
 /**
  * @name TTSShape
@@ -89,4 +89,4 @@ export interface TTSShape {
  * @name TTS
  * @description The tts context that will be used to run the tts provider.
  */
-export class TTS extends Context.Tag("@aiffect/TTS")<TTS, TTSShape>() {}
+export class TTS extends ServiceMap.Service<TTS, TTSShape>()("@aiffect/TTS") {}

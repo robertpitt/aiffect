@@ -2,7 +2,7 @@
  * OpenAI Realtime — pure message handler: server message + state → actions + next state.
  */
 
-import { AudioFrame } from "../../../core/AudioFrame.js";
+import { AudioFrame } from "@/core/AudioFrame.js";
 import {
   TranscriptDelta,
   SpeechStarted,
@@ -12,9 +12,9 @@ import {
   ResponseCompleted,
   AudioOutputStarted,
   AudioOutputDone,
-} from "../../../core/Events.js";
-import type { RealtimeAction } from "../../../core/RealtimeTypes.js";
-import type { OpenAIHandlerState, OpenAIServerMessage } from "./schema.js";
+} from "@/core/Events.js";
+import type { RealtimeAction } from "@/core/RealtimeTypes.js";
+import type { OpenAIHandlerState, OpenAIServerMessage } from "@/providers/openai/realtime/schema.js";
 
 const SAMPLE_RATE = 24000;
 const CHANNELS = 1;

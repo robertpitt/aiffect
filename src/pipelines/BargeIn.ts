@@ -1,7 +1,7 @@
 import { Effect, Ref } from "effect";
-import type { PipelineEvent } from "../core/Events.js";
-import { Realtime } from "../core/Provider.js";
-import { Transport } from "../core/Transport.js";
+import type { PipelineEvent } from "@/core/Events.js";
+import { Realtime } from "@/core/Provider.js";
+import { Transport } from "@/core/Transport.js";
 
 export interface BargeInState {
   readonly onEvent: (event: PipelineEvent) => Effect.Effect<void>;
@@ -43,7 +43,7 @@ export const make: Effect.Effect<BargeInState, never, Realtime | Transport> = Ef
       );
     }).pipe(
       Effect.withSpan("pipeline.bargeIn"),
-      Effect.catchAll((cause) =>
+      Effect.catch((cause) =>
         Effect.logError("barge-in failed").pipe(Effect.annotateLogs("error", String(cause))),
       ),
     );

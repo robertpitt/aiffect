@@ -5,22 +5,22 @@
  */
 
 import { Effect, Queue, Ref, Stream } from "effect";
-import type { AudioFrame } from "../core/AudioFrame.js";
-import { Transport } from "../core/Transport.js";
-import { pcm16Rms } from "../internal/audio.js";
+import type { AudioFrame } from "@/core/AudioFrame.js";
+import { Transport } from "@/core/Transport.js";
+import { pcm16Rms } from "@/internal/audio.js";
 import {
   type BargeInConfig,
   DEFAULT_ENERGY_THRESHOLD,
   DEFAULT_FRAME_THRESHOLD,
-} from "./BargeInConfig.js";
+} from "@/pipelines/BargeInConfig.js";
 
 export interface BargeInEnergyDeps {
-  readonly transport: Transport["Type"];
+  readonly transport: Transport["Service"];
   readonly audioQueue: Queue.Queue<AudioFrame>;
   readonly assistantSpeaking: Ref.Ref<boolean>;
   readonly speechFrameCount: Ref.Ref<number>;
   readonly currentTurnFiber: Ref.Ref<
-    import("effect").Fiber.RuntimeFiber<void, unknown> | null
+    import("effect").Fiber.Fiber<void, unknown> | null
   >;
   readonly onInterrupt: Effect.Effect<void>;
 }
@@ -32,7 +32,7 @@ export interface BargeInEnergyDeps {
 export function createInboundMonitor(
   config: BargeInConfig | undefined,
   deps: BargeInEnergyDeps,
-): Effect.Effect<void, import("../core/Errors.js").TransportError> {
+): Effect.Effect<void, import("@/core/Errors.js").TransportError> {
   const energyThreshold = config?.energyThreshold ?? DEFAULT_ENERGY_THRESHOLD;
   const frameThreshold = config?.frameThreshold ?? DEFAULT_FRAME_THRESHOLD;
 

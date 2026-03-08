@@ -1,6 +1,6 @@
-import { Toolkit } from "@effect/ai";
+import { Toolkit } from "effect/unstable/ai";
 import { Layer } from "effect";
-import { defineAgent } from "../../src/core/Agent.js";
+import { defineAgent } from "@/core/Agent.js";
 import { customerToolkit, customerToolkitLayer } from "./toolkits/CustomerTools.js";
 import { reservationToolkit, reservationToolkitLayer } from "./toolkits/ReservationTools.js";
 import { menuToolkit, menuToolkitLayer } from "./toolkits/MenuTools.js";
@@ -13,7 +13,7 @@ const conciergeToolkitLayer = Layer.merge(
 
 export const conciergeAgent = defineAgent({
   name: "Concierge Agent",
-  buildPrompt: () =>
+  buildPrompt: (_agentContext, _sessionContext) =>
     `You are a concierge agent. You can help with finding restaurants, viewing menus, and making or managing reservations. Use the right tool for each request.`,
   toolkit: conciergeToolkit,
   toolkitLayer: conciergeToolkitLayer,

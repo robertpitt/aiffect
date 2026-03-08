@@ -1,4 +1,4 @@
-import { Context } from "effect";
+import { ServiceMap } from "effect";
 
 /**
  * App-level dependencies (repositories, services) available to agents and tools.
@@ -8,7 +8,6 @@ export interface ServerContextShape {
   readonly [key: string]: unknown;
 }
 
-export class ServerContext extends Context.Tag("@aiffect/ServerContext")<
-  ServerContext,
-  ServerContextShape
->() {}
+export class ServerContext extends ServiceMap.Service<ServerContext, ServerContextShape>()(
+  "@aiffect/ServerContext",
+) {}

@@ -1,7 +1,7 @@
 import { Config, Effect, Layer, Redacted, Stream } from "effect";
-import { TTS } from "../../core/Provider.js";
-import { ProviderError } from "../../core/Errors.js";
-import { AudioFrame } from "../../core/AudioFrame.js";
+import { TTS } from "@/core/Provider.js";
+import { ProviderError } from "@/core/Errors.js";
+import { AudioFrame } from "@/core/AudioFrame.js";
 
 const OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -63,7 +63,7 @@ export const make = (options?: OpenAITTSOptions) =>
       const voice = options?.voice ?? "alloy";
       const speed = options?.speed ?? 1.0;
 
-      const synthesize: TTS["Type"]["synthesize"] = (text) =>
+      const synthesize: TTS["Service"]["synthesize"] = (text) =>
         Stream.unwrap(
           Effect.gen(function* () {
             const response = yield* Effect.tryPromise({

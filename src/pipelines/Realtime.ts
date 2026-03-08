@@ -1,18 +1,18 @@
 import { Effect, Layer, Ref, Stream } from "effect";
-import { Pipeline } from "../core/Pipeline.js";
-import { Transport } from "../core/Transport.js";
-import { Realtime } from "../core/Provider.js";
+import { Pipeline } from "@/core/Pipeline.js";
+import { Transport } from "@/core/Transport.js";
+import { Realtime } from "@/core/Provider.js";
 import {
   RealtimeAudioConfig,
   RealtimeAudioConfigLive,
-} from "../core/AudioTransform.js";
-import { toPipelineError } from "../core/Errors.js";
-import { Agent } from "../core/Agent.js";
-import { make as makeBargeIn } from "./BargeIn.js";
-import { make as makeEventBroadcast } from "./EventBroadcast.js";
-import { dispatch as dispatchToolCall } from "./ToolDispatch.js";
-import { logEvent } from "../observability/EventLogger.js";
-import { instrumentRealtime } from "../observability/InstrumentedRealtime.js";
+} from "@/core/AudioTransform.js";
+import { toPipelineError } from "@/core/Errors.js";
+import { Agent } from "@/core/Agent.js";
+import { make as makeBargeIn } from "@/pipelines/BargeIn.js";
+import { make as makeEventBroadcast } from "@/pipelines/EventBroadcast.js";
+import { dispatch as dispatchToolCall } from "@/pipelines/ToolDispatch.js";
+import { logEvent } from "@/observability/EventLogger.js";
+import { instrumentRealtime } from "@/observability/InstrumentedRealtime.js";
 
 /**
  * Realtime pipeline: bidirectional audio loop with three concurrent fibers,
@@ -35,7 +35,7 @@ const makePipeline = Layer.effect(
 
     const inboundFiber = audioConfig.inputTransform(transport.inbound).pipe(
       Stream.mapEffect((frame) => realtime.send(frame)),
-      Stream.catchAll((e) => Stream.fail(toPipelineError(e))),
+      Stream.catch((e) => Stream.fail(toPipelineError(e))),
       Stream.runDrain,
     );
 
@@ -52,7 +52,7 @@ const makePipeline = Layer.effect(
             yield* transport.send(frame);
           }),
         ),
-        Stream.catchAll((e) =>
+        Stream.catch((e) =>
           Stream.fail(toPipelineError(e, "Outbound error")),
         ),
         Stream.runDrain,
@@ -98,21 +98,21 @@ const makePipeline = Layer.effect(
             }
           }),
         ),
-        Stream.catchAll((e) =>
+        Stream.catch((e) =>
           Stream.fail(toPipelineError(e, "Event processing error")),
         ),
         Stream.runDrain,
       );
     });
 
-    const run: Pipeline["Type"]["run"] = Effect.log(
+    const run: Pipeline["Service"]["run"] = Effect.log(
       "starting voice loop",
     ).pipe(
       Effect.flatMap(() =>
         Effect.raceAll([inboundFiber, outboundFiber, eventFiber]),
       ),
       Effect.tap(() => Effect.log("voice loop ended")),
-      Effect.catchAll((cause) => Effect.fail(toPipelineError(cause))),
+      Effect.catch((cause) => Effect.fail(toPipelineError(cause))),
     );
 
     return { run, events: eventBroadcast.subscribe };

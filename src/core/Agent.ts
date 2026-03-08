@@ -1,15 +1,15 @@
-import { Toolkit, type Tool } from "@effect/ai";
-import { Context, Effect, Layer } from "effect";
-import { AgentError } from "./Errors.js";
-
-export interface AgentContext {
-  readonly sessionId: string;
-  readonly metadata: Record<string, unknown>;
-}
+import type { AgentContextShape } from "@/core/AgentContext.js";
+import type { SessionContextShape } from "@/core/SessionContext.js";
+import { Toolkit, type Tool } from "effect/unstable/ai";
+import { Effect, Layer, ServiceMap } from "effect";
+import { AgentError } from "@/core/Errors.js";
 
 export interface AgentSpec {
   readonly name: string;
-  readonly buildPrompt: (context: AgentContext) => string;
+  readonly buildPrompt: (
+    agentContext: AgentContextShape,
+    sessionContext: SessionContextShape,
+  ) => string;
   readonly toolkit: Toolkit.Any;
   readonly toolkitLayer: Layer.Layer<unknown, unknown, unknown>;
   /** Invoke a tool by name with parsed arguments. Fully self-contained (includes toolkitLayer). */
@@ -18,7 +18,10 @@ export interface AgentSpec {
 
 export interface DefineAgentParams {
   readonly name: string;
-  readonly buildPrompt: (context: AgentContext) => string;
+  readonly buildPrompt: (
+    agentContext: AgentContextShape,
+    sessionContext: SessionContextShape,
+  ) => string;
   readonly toolkit: Toolkit.Any;
   readonly toolkitLayer: Layer.Layer<unknown, unknown, unknown>;
 }
@@ -30,7 +33,8 @@ export interface DefineAgentParams {
  * @example
  * const agent = defineAgent({
  *   name: "Demo",
- *   buildPrompt: (ctx) => `Session ${ctx.sessionId}. You are helpful.`,
+ *   buildPrompt: (agentCtx, sessionCtx) =>
+ *     `Session ${sessionCtx.sessionId}. You are helpful.`,
  *   toolkit: DemoToolkit,
  *   toolkitLayer: DemoToolkitLive,
  * });
@@ -59,4 +63,4 @@ export function defineAgent(spec: DefineAgentParams): AgentSpec {
   };
 }
 
-export class Agent extends Context.Tag("@aiffect/Agent")<Agent, AgentSpec>() {}
+export class Agent extends ServiceMap.Service<Agent, AgentSpec>()("@aiffect/Agent") {}
