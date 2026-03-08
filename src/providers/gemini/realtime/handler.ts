@@ -2,7 +2,7 @@
  * Gemini Live Realtime — pure message handler: server message + state → actions + next state.
  */
 
-import { AudioFrame } from "../../../schemas/AudioFrame.js";
+import { AudioFrame } from "../../../core/AudioFrame.js";
 import {
   TranscriptDelta,
   SpeechStarted,
@@ -11,17 +11,14 @@ import {
   ResponseCompleted,
   AudioOutputStarted,
   AudioOutputDone,
-} from "../../../schemas/Events.js";
-import type { RealtimeAction } from "../../../framework/RealtimeTypes.js";
-import {
-  CHANNELS,
-  DEFAULT_SAMPLE_RATE,
-  type GeminiServerMessage,
-  type GeminiHandlerState,
-} from "./types.js";
+} from "../../../core/Events.js";
+import type { RealtimeAction } from "../../../core/RealtimeTypes.js";
+import type { GeminiServerMessage, GeminiHandlerState } from "./schema.js";
+export type { GeminiHandlerState } from "./schema.js";
+export { initialGeminiHandlerState } from "./schema.js";
 
-export type { GeminiHandlerState } from "./types.js";
-export { initialGeminiHandlerState } from "./types.js";
+const DEFAULT_SAMPLE_RATE = 24000;
+const CHANNELS = 1;
 
 function parsePcmSampleRate(mimeType: string | undefined): number {
   if (!mimeType) return DEFAULT_SAMPLE_RATE;
@@ -72,6 +69,7 @@ export function handleGeminiMessage(
           }),
         });
       }
+      actions.push({ _tag: "ClearAudioQueue" });
       nextState = { ...nextState, responseActive: false, responseId: null, audioFrameCount: 0 };
     }
 
@@ -140,6 +138,7 @@ export function handleGeminiMessage(
     }
 
     if (content.turnComplete && nextState.responseActive && nextState.responseId) {
+      const usage = msg.usageMetadata;
       actions.push({
         _tag: "Event",
         event: new AudioOutputDone({
@@ -154,7 +153,8 @@ export function handleGeminiMessage(
           responseId: nextState.responseId,
           timestamp: ts,
           status: "completed",
-          outputTokens: 0,
+          inputTokens: usage?.promptTokenCount ?? 0,
+          outputTokens: usage?.responseTokenCount ?? 0,
           audioFrames: nextState.audioFrameCount,
         }),
       });

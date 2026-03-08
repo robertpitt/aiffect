@@ -1,6 +1,6 @@
 import { Tool, Toolkit } from "@effect/ai";
 import { Effect, Schema } from "effect";
-import { ServerContext } from "../../../src/framework/ServerContext.js";
+import { ServerContext } from "../../../src/core/ServerContext.js";
 import type { SampleServerContextShape } from "../ServerContext.js";
 
 const getResturant = Tool.make("getResturant", {

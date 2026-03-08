@@ -1,8 +1,8 @@
 import { Effect, Layer, Queue, Stream } from "effect";
 import type WebSocket from "ws";
-import { AudioFrame } from "../schemas/AudioFrame.js";
-import { Transport } from "../framework/Transport.js";
-import { TransportError } from "../framework/Errors.js";
+import { AudioFrame } from "../core/AudioFrame.js";
+import { Transport } from "../core/Transport.js";
+import { TransportError } from "../core/Errors.js";
 
 const DEFAULT_SAMPLE_RATE = 24000;
 const DEFAULT_CHANNELS = 1;
@@ -23,7 +23,7 @@ export interface WebSocketTransportOptions {
 
 /**
  * Create a Transport layer from a raw WebSocket that carries PCM16 audio.
- * Pass options (e.g. sampleRate, channels from your AppConfig) or omit for defaults.
+ * Pass options (e.g. sampleRate, channels) or omit for defaults.
  * The WebSocket is closed when the enclosing scope finalizes.
  */
 export const fromWebSocket = (

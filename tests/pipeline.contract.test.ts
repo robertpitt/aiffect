@@ -5,20 +5,20 @@
 
 import { describe, it, expect } from "vitest";
 import { Effect, Fiber, Layer, Queue, Duration } from "effect";
-import { AudioFrame } from "../src/schemas/AudioFrame.js";
-import { run as runSession } from "../src/framework/Session.js";
+import { Toolkit } from "@effect/ai";
+import { AudioFrame } from "../src/core/AudioFrame.js";
+import { Pipeline } from "../src/core/Pipeline.js";
 import { make as RealtimePipeline } from "../src/pipelines/Realtime.js";
-import { Agent } from "../src/framework/Agent.js";
-import type { AgentSpec } from "../src/framework/Agent.js";
+import { Agent, defineAgent } from "../src/core/Agent.js";
 import { makeTestTransport } from "../src/test/TestTransport.js";
 import { makeTestRealtime } from "../src/test/TestProvider.js";
 
-const noopAgent: AgentSpec = {
+const noopAgent = defineAgent({
   name: "TestAgent",
   buildPrompt: () => "You are a test agent.",
-  toolkit: { tools: {} } as AgentSpec["toolkit"],
+  toolkit: Toolkit.empty,
   toolkitLayer: Layer.empty as Layer.Layer<any, never, never>,
-};
+});
 
 describe("Pipeline contract", () => {
   it("when inbound audio is pushed to transport, provider receives frames", async () => {
@@ -34,11 +34,15 @@ describe("Pipeline contract", () => {
         Layer.provide(Layer.scope),
       );
 
-      const session = runSession({ connectionId: "test-1" });
       const run = Effect.scoped(
         Layer.build(appLayer).pipe(
           Effect.flatMap((ctx) =>
-            Effect.fork(session.pipe(Effect.provide(ctx))).pipe(
+            Effect.fork(
+              Effect.gen(function* () {
+                const pipeline = yield* Pipeline;
+                yield* pipeline.run;
+              }).pipe(Effect.provide(ctx)),
+            ).pipe(
               Effect.flatMap((fiber) =>
                 Effect.gen(function* () {
                   yield* Effect.sleep(Duration.millis(100));

@@ -1,7 +1,7 @@
 import { Effect, ParseResult, Queue, Schema, Stream } from "effect";
 import type { Scope } from "effect";
 import type WebSocket from "ws";
-import { ProviderError } from "../framework/Errors.js";
+import { ProviderError } from "../core/Errors.js";
 
 /**
  * Decode raw JSON at the provider message boundary. Use in adapters before passing to pure handlers.

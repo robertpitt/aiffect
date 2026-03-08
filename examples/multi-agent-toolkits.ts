@@ -14,27 +14,31 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { WebSocketServer } from "ws";
+import { Session, OpenAI, Gemini, WebSocketTransport, ServerContext } from "../src/index.js";
 import {
-  WebSocketTransport,
-  runWithConfig,
-  ProviderRegistryLive,
-  PipelineRegistryLive,
-  SessionConfig,
-} from "../src/index.js";
-import { SampleAgentRegistry, SampleServerContextLive } from "../sample/agents/index.js";
+  restaurantAgent,
+  reservationsAgent,
+  conciergeAgent,
+  SampleServerContextLive,
+} from "../sample/agents/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const VALID_AGENTS = ["restaurant", "reservations", "concierge"] as const;
-type AgentId = (typeof VALID_AGENTS)[number];
+const agents = { restaurant: restaurantAgent, reservations: reservationsAgent, concierge: conciergeAgent };
+type AgentId = keyof typeof agents;
+
+const VALID_AGENTS = Object.keys(agents) as AgentId[];
 
 function agentFromUrl(url: string): AgentId {
   const u = new URL(url, "http://localhost");
   const a = u.searchParams.get("agent") ?? "concierge";
   return VALID_AGENTS.includes(a as AgentId) ? (a as AgentId) : "concierge";
 }
+
+const useGemini = process.env["REALTIME_PROVIDER"] === "gemini";
+const provider = useGemini ? Gemini.realtime({ voice: "Aoede" }) : OpenAI.realtime({ voice: "alloy" });
 
 const indexHtml = readFileSync(join(__dirname, "public", "index.html"), "utf-8");
 const server = createServer((req, res) => {
@@ -45,22 +49,14 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws, req) => {
-  const agentId = req.url ? agentFromUrl(req.url) : "concierge";
-  const sessionConfig: SessionConfig = {
-    agent: { agentId, voice: "alloy" },
-    pipeline: "realtime",
-    provider: process.env["REALTIME_PROVIDER"] === "gemini" ? "gemini" : "openai",
-    inputAudioFormat: "pcm16",
-    sampleRate: 24000,
-    channels: 1,
-    connectionId: crypto.randomUUID(),
-  };
+  const agentId = agentFromUrl(req.url ?? "");
 
-  const session = runWithConfig(sessionConfig, WebSocketTransport(ws)).pipe(
-    Effect.provide(SampleAgentRegistry),
-    Effect.provide(SampleServerContextLive),
-    Effect.provide(ProviderRegistryLive),
-    Effect.provide(PipelineRegistryLive),
+  const session = Session.run({
+    agentId,
+    agents,
+    provider: Layer.provide(provider, SampleServerContextLive),
+    transport: WebSocketTransport(ws),
+  }).pipe(
     Effect.catchAllCause((cause) => Effect.log(`session ended: ${cause}`)),
   );
 

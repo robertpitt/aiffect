@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Tool, Toolkit } from "@effect/ai";
-import { ServerContext } from "../../../src/framework/ServerContext.js";
-import { SessionContext, getSession } from "../../../src/framework/SessionContext.js";
+import { ServerContext } from "../../../src/core/ServerContext.js";
+import { SessionContext } from "../../../src/core/SessionContext.js";
 import type { SampleServerContextShape } from "../ServerContext.js";
 
 const reservationSuccess = Schema.Struct({
@@ -56,7 +56,7 @@ export const reservationToolkitLayer = reservationToolkit.toLayer({
   }) =>
     Effect.gen(function* () {
       const server = (yield* ServerContext) as unknown as SampleServerContextShape;
-      const session = yield* getSession();
+      const session = yield* SessionContext;
       yield* Effect.log(`createReservation scoped to session ${session.sessionId}`);
       return yield* server.reservationService.create({
         restaurantName,
@@ -75,7 +75,7 @@ export const reservationToolkitLayer = reservationToolkit.toLayer({
   }) =>
     Effect.gen(function* () {
       const server = (yield* ServerContext) as unknown as SampleServerContextShape;
-      const session = yield* getSession();
+      const session = yield* SessionContext;
       yield* Effect.log(`listReservations scoped to session ${session.sessionId}`);
       return yield* server.reservationService.list({ guestName, restaurantName });
     }),

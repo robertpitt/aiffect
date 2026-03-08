@@ -15,7 +15,6 @@
  * from the session app layer; provide SampleServerContextLive when running sessions.
  */
 
-import { agents } from "../../src/framework/AgentRegistry.js";
 import { restaurantAgent } from "./restaurant.js";
 import { reservationsAgent } from "./reservations.js";
 import { conciergeAgent } from "./concierge.js";
@@ -31,9 +30,3 @@ export {
   type MenuRepository,
   type ReservationService,
 } from "./ServerContext.js";
-
-export const SampleAgentRegistry = agents({
-  restaurant: restaurantAgent,
-  reservations: reservationsAgent,
-  concierge: conciergeAgent,
-});

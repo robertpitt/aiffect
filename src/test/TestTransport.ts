@@ -3,9 +3,9 @@
  */
 
 import { Effect, Layer, Queue, Stream } from "effect";
-import { AudioFrame } from "../schemas/AudioFrame.js";
-import { Transport } from "../framework/Transport.js";
-import { TransportError } from "../framework/Errors.js";
+import { AudioFrame } from "../core/AudioFrame.js";
+import { Transport } from "../core/Transport.js";
+import { TransportError } from "../core/Errors.js";
 
 export interface TestTransportHarness {
   readonly layer: Layer.Layer<Transport>;

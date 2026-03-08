@@ -1,41 +1,143 @@
-// Core Framework
-export * from "./framework/Errors.js";
-export * from "./framework/Transport.js";
-export * from "./framework/Provider.js";
-export * from "./framework/Pipeline.js";
-export * from "./framework/Session.js";
-export * from "./framework/Config.js";
-export * from "./framework/ServerContext.js";
-export * from "./framework/AgentRegistry.js";
-export * from "./framework/ProviderRegistry.js";
-export * from "./framework/PipelineRegistry.js";
-export * from "./framework/SessionConfig.js";
-export * from "./framework/AudioTransform.js";
-export * from "./framework/SessionContext.js";
-export * from "./framework/PipelineEventSink.js";
-export * from "./framework/RealtimeTypes.js";
-export * from "./framework/Capabilities.js";
-export * from "./framework/Agent.js";
-export * from "./framework/Memory.js";
-export * from "./transports/WebSocket.js";
-export * from "./observability/UsageMetrics.js";
+// ---------------------------------------------------------------------------
+// High-level API
+// ---------------------------------------------------------------------------
 
-// Schemas
-export * from "./schemas/AudioFrame.js";
-export * from "./schemas/Events.js";
+export * as Session from "./Session.js";
+export type {
+  SessionOptions,
+  SessionWithEvents,
+} from "./Session.js";
 
-// Transports
+export {
+  Agent,
+  type AgentSpec,
+  type AgentContext,
+  defineAgent,
+} from "./core/Agent.js";
+
+// ---------------------------------------------------------------------------
+// Providers (namespaced)
+// ---------------------------------------------------------------------------
+
+export * as OpenAI from "./providers/openai/index.js";
+export * as Gemini from "./providers/gemini/index.js";
+
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
+
 export { fromWebSocket as WebSocketTransport } from "./transports/WebSocket.js";
-export { fromWebSocket as WebSocketTransportLive } from "./transports/WebSocket.js";
-export type { WebSocketTransportOptions, QueueDropStrategy } from "./transports/WebSocket.js";
+export type {
+  WebSocketTransportOptions,
+  QueueDropStrategy,
+} from "./transports/WebSocket.js";
 
-// Providers
-export { make as OpenAIRealtimeProvider } from "./providers/openai/realtime/flow.js";
-export { make as OpenAIRealtimeProviderLive } from "./providers/openai/realtime/flow.js";
-export { make as GeminiRealtimeProvider } from "./providers/gemini/realtime/flow.js";
-export { make as GeminiRealtimeProviderLive } from "./providers/gemini/realtime/flow.js";
+// ---------------------------------------------------------------------------
+// Core types (for advanced usage / custom providers)
+// ---------------------------------------------------------------------------
 
-// Pipelines
-export { make as RealtimePipeline, make as RealtimePipelineLive } from "./pipelines/Realtime.js";
+export {
+  Pipeline,
+  createPipeline,
+  type PipelineShape,
+  type PipelineRequirements,
+} from "./core/Pipeline.js";
+export {
+  Realtime,
+  type RealtimeShape,
+  STT,
+  type STTShape,
+  TTS,
+  type TTSShape,
+} from "./core/Provider.js";
+export { Transport, type TransportShape } from "./core/Transport.js";
+export { AudioFrame } from "./core/AudioFrame.js";
+export type { PipelineEvent } from "./core/Events.js";
+export {
+  TranscriptDelta,
+  SpeechStarted,
+  SpeechEnded,
+  Interrupted,
+  ToolCallStarted,
+  ToolCallCompleted,
+  ToolCallError,
+  ResponseStarted,
+  ResponseCompleted,
+  AudioOutputStarted,
+  AudioOutputDone,
+} from "./core/Events.js";
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+export {
+  TransportError,
+  ProviderError,
+  PipelineError,
+  ConfigError,
+  AgentError,
+  toPipelineError,
+} from "./core/Errors.js";
+
+// ---------------------------------------------------------------------------
+// Observability
+// ---------------------------------------------------------------------------
+
+export { instrumentRealtime } from "./observability/InstrumentedRealtime.js";
+export { make as makeEventBroadcast } from "./pipelines/EventBroadcast.js";
+export {
+  inputTokensCounter,
+  outputTokensCounter,
+  trackTokenUsage,
+} from "./observability/UsageMetrics.js";
+
+// ---------------------------------------------------------------------------
+// Session context
+// ---------------------------------------------------------------------------
+
+export { AgentRegistry, makeAgentRegistry } from "./core/AgentRegistry.js";
+export { ServerContext, type ServerContextShape } from "./core/ServerContext.js";
+export {
+  SessionContext,
+  makeSessionContext,
+  getSession,
+  type SessionContextShape,
+} from "./core/SessionContext.js";
+// ---------------------------------------------------------------------------
+// Audio transforms
+// ---------------------------------------------------------------------------
+
+export {
+  RealtimeAudioConfig,
+  RealtimeAudioConfigLive,
+  type RealtimeAudioConfigShape,
+  type AudioTransform,
+  identityTransform,
+} from "./core/AudioTransform.js";
+
+// ---------------------------------------------------------------------------
+// Pipelines (for advanced composition)
+// ---------------------------------------------------------------------------
+
+export { make as RealtimePipeline } from "./pipelines/Realtime.js";
 export { make as SandwichPipeline } from "./pipelines/Sandwich.js";
 export { make as SandwichBargeInPipeline } from "./pipelines/SandwichBargeIn.js";
+export {
+  type BargeInConfig,
+  DEFAULT_ENERGY_THRESHOLD,
+  DEFAULT_FRAME_THRESHOLD,
+} from "./pipelines/BargeInConfig.js";
+
+// ---------------------------------------------------------------------------
+// Kernel (for building custom providers)
+// ---------------------------------------------------------------------------
+
+export {
+  makeRealtimeLayer,
+  type RealtimeAdapter,
+  type KernelInterruptCtx,
+  type MessageSocket,
+  defaultOnSessionReady,
+  defaultEncodeRequestResponse,
+} from "./providers/RealtimeKernel.js";

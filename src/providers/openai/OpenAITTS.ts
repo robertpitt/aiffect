@@ -1,7 +1,7 @@
 import { Config, Effect, Layer, Redacted, Stream } from "effect";
-import { TTS } from "../../framework/Provider.js";
-import { ProviderError } from "../../framework/Errors.js";
-import { AudioFrame } from "../../schemas/AudioFrame.js";
+import { TTS } from "../../core/Provider.js";
+import { ProviderError } from "../../core/Errors.js";
+import { AudioFrame } from "../../core/AudioFrame.js";
 
 const OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
 const OUTPUT_SAMPLE_RATE = 24000;

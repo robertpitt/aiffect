@@ -1,233 +1,195 @@
 /**
- * Gemini Live Realtime — connection, interrupt, and inbuilt flow (message loop → Realtime service).
+ * Gemini Live Realtime — thin adapter over the shared RealtimeKernel.
  */
 
-import { Config, Effect, Layer, Option, Queue, Redacted, Ref, Stream } from "effect";
-import type { Scope } from "effect";
-import type WebSocket from "ws";
+import { Config, Effect, Queue, Redacted } from "effect";
 import WS from "ws";
-import type { AudioFrame } from "../../../schemas/AudioFrame.js";
-import type { PipelineEvent } from "../../../schemas/Events.js";
-import { Interrupted } from "../../../schemas/Events.js";
-import type { AgentContext } from "../../../framework/Agent.js";
-import { Agent } from "../../../framework/Agent.js";
-import { ProviderError } from "../../../framework/Errors.js";
-import { Realtime } from "../../../framework/Provider.js";
-import type { RealtimeAction } from "../../../framework/RealtimeTypes.js";
-import { decodeAtBoundary, make as makeMessageSocket } from "../../../internal/MessageSocket.js";
+import type { AgentContext, AgentSpec } from "../../../core/Agent.js";
+import { ProviderError } from "../../../core/Errors.js";
+import { Interrupted } from "../../../core/Events.js";
 import { serializeToolOutput } from "../../../internal/serializeToolOutput.js";
-import { handleGeminiMessage } from "./handler.js";
-import { buildSessionSetup } from "./session.js";
-import { inputTokensCounter, outputTokensCounter } from "../../../observability/UsageMetrics.js";
-import { GeminiServerMessageSchema } from "./schema.js";
+import { make as makeMessageSocket } from "../../../internal/MessageSocket.js";
 import {
-  GEMINI_LIVE_WS_URL,
-  GEMINI_AUDIO_MIME,
+  makeRealtimeLayer,
+  type RealtimeAdapter,
+} from "../../RealtimeKernel.js";
+import { handleGeminiMessage } from "./handler.js";
+import {
+  GeminiServerMessageSchema,
   initialGeminiHandlerState,
   type GeminiRealtimeOptions,
+  type GeminiServerMessage,
   type GeminiHandlerState,
-} from "./types.js";
+} from "./schema.js";
 
-const PROVIDER_NAME = "Gemini";
+const GEMINI_LIVE_WS_URL =
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+const GEMINI_AUDIO_MIME = "audio/pcm;rate=24000";
+const DEFAULT_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 
-function connect(options?: GeminiRealtimeOptions): Effect.Effect<WebSocket, ProviderError, Agent> {
-  return Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("GEMINI_API_KEY").pipe(
-      Effect.orElse(() => Config.redacted("GOOGLE_API_KEY")),
-      Effect.mapError(
-        (e) =>
-          new ProviderError({
-            provider: PROVIDER_NAME,
-            reason: "Missing or invalid GEMINI_API_KEY / GOOGLE_API_KEY",
-            cause: e,
-          }),
-      ),
-    );
-    yield* Agent;
-    const url = `${GEMINI_LIVE_WS_URL}?key=${encodeURIComponent(Redacted.value(apiKey))}`;
-    return yield* Effect.async<WebSocket, ProviderError>((resume) => {
-      const socket = new WS(url);
-      socket.on("open", () => resume(Effect.succeed(socket as unknown as WebSocket)));
-      socket.on("error", (err) =>
-        resume(
-          Effect.fail(
-            new ProviderError({
-              provider: PROVIDER_NAME,
-              reason: `WebSocket connection failed: ${err.message}`,
-              cause: err,
-            }),
-          ),
-        ),
-      );
-    });
-  });
+function sanitizeParametersForGemini(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const omit = new Set(["strict", "additionalProperties"]);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (omit.has(k)) continue;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      if (k === "properties" && v !== null && typeof v === "object") {
+        const sanitized: Record<string, unknown> = {};
+        for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
+          sanitized[pk] =
+            pv && typeof pv === "object" && !Array.isArray(pv)
+              ? sanitizeParametersForGemini(pv as Record<string, unknown>)
+              : pv;
+        }
+        out[k] = sanitized;
+      } else if (k === "items" && v !== null && typeof v === "object") {
+        out[k] = sanitizeParametersForGemini(v as Record<string, unknown>);
+      } else {
+        out[k] = v;
+      }
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
-function onInterrupt(ctx: {
-  audioQueue: Queue.Queue<AudioFrame>;
-  eventQueue: Queue.Queue<PipelineEvent>;
-}): Effect.Effect<void, ProviderError> {
-  return Effect.gen(function* () {
-    yield* Queue.takeAll(ctx.audioQueue);
-    yield* Queue.offer(ctx.eventQueue, new Interrupted({ timestamp: Date.now() }));
-  });
-}
-
-function runFlow(
+function buildSessionSetup(
+  agent: AgentSpec,
+  context: AgentContext,
   options?: GeminiRealtimeOptions,
-): Effect.Effect<Realtime["Type"], ProviderError, Scope.Scope | Agent> {
-  return Effect.gen(function* () {
-    const agent = yield* Agent;
-    const ws: WebSocket = yield* connect(options).pipe(Effect.withSpan("gemini.connect"));
-    yield* Effect.log(`${PROVIDER_NAME} websocket connected`);
-
-    const socket = yield* makeMessageSocket(ws, { provider: PROVIDER_NAME });
-    const audioQueue = yield* Queue.unbounded<AudioFrame>();
-    const eventQueue = yield* Queue.unbounded<PipelineEvent>();
-    const stateRef = yield* Ref.make(initialGeminiHandlerState);
-
-    const agentContext: AgentContext = {
-      sessionId: crypto.randomUUID(),
-      metadata: {},
+) {
+  const systemPrompt = agent.buildPrompt(context);
+  const model = options?.model ?? DEFAULT_MODEL;
+  const voice = options?.voice ?? "Puck";
+  const modelName = model.startsWith("models/") ? model : `models/${model}`;
+  const tools = Object.values(agent.toolkit.tools).map((tool) => {
+    const t = tool as {
+      name?: string;
+      description?: string;
+      parametersJsonSchema?: Record<string, unknown>;
     };
-    const sessionMsg = { setup: buildSessionSetup(agent, agentContext, options) };
-    yield* socket.send(sessionMsg);
-    yield* Effect.log(`${PROVIDER_NAME} session message sent`);
-
-    const setState = (s: GeminiHandlerState) => Ref.set(stateRef, s);
-    const dispatch = (action: RealtimeAction) =>
-      Effect.gen(function* () {
-        switch (action._tag) {
-          case "AudioFrame":
-            yield* Queue.offer(audioQueue, action.frame);
-            break;
-          case "Event":
-            yield* Queue.offer(eventQueue, action.event);
-            break;
-          case "SessionReady":
-            yield* Effect.log(`${PROVIDER_NAME} session ready`);
-            yield* socket.send({
-              clientContent: {
-                turns: { role: "user", parts: [{ text: "Say your greeting." }] },
-                turnComplete: true,
-              },
-            });
-            break;
-          case "Ignored":
-            break;
-        }
-      });
-
-    const messageLoop = Stream.runForEach(socket.inbound, (raw) =>
-      Effect.gen(function* () {
-        const decoded = yield* decodeAtBoundary(GeminiServerMessageSchema)(raw).pipe(
-          Effect.tapError((e) =>
-            Effect.log(`${PROVIDER_NAME} message decode failed`).pipe(
-              Effect.annotateLogs("parseError", String(e)),
-            ),
-          ),
-          Effect.option,
-        );
-        if (Option.isNone(decoded)) return;
-        const msg = decoded.value;
-        const state = yield* Ref.get(stateRef);
-        const { actions, nextState } = handleGeminiMessage(msg, state);
-        yield* setState(nextState);
-        for (const a of actions) {
-          yield* dispatch(a);
-        }
-        if (msg.usageMetadata) {
-          const u = msg.usageMetadata;
-          yield* Effect.tagMetrics(
-            "provider",
-            "gemini",
-          )(inputTokensCounter(Effect.succeed(u.promptTokenCount ?? 0)));
-          yield* Effect.tagMetrics(
-            "provider",
-            "gemini",
-          )(outputTokensCounter(Effect.succeed(u.responseTokenCount ?? 0)));
-        }
-        if (msg.serverContent?.interrupted === true) {
-          yield* Queue.takeAll(audioQueue);
-        }
-      }),
-    );
-
-    yield* Effect.fork(messageLoop);
-
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        yield* Queue.shutdown(audioQueue);
-        yield* Queue.shutdown(eventQueue);
-        yield* Effect.sync(() => {
-          if (ws.readyState === ws.OPEN) ws.close();
-        });
-      }),
-    );
-
-    const send: Realtime["Type"]["send"] = (frame) =>
-      socket.send({
-        realtimeInput: {
-          audio: {
-            mimeType: GEMINI_AUDIO_MIME,
-            // Avoid Buffer.from copy when frame.samples is already a Buffer (Node Buffer extends Uint8Array)
-            data:
-              frame.samples instanceof Buffer
-                ? frame.samples.toString("base64")
-                : Buffer.from(frame.samples).toString("base64"),
-          },
-        },
-      });
-
-    const receive: Realtime["Type"]["receive"] = Stream.fromQueue(audioQueue).pipe(
-      Stream.catchAll(() =>
-        Stream.fail(new ProviderError({ provider: PROVIDER_NAME, reason: "Audio stream closed" })),
-      ),
-    );
-
-    const events: Realtime["Type"]["events"] = Stream.fromQueue(eventQueue).pipe(
-      Stream.catchAll(() =>
-        Stream.fail(new ProviderError({ provider: PROVIDER_NAME, reason: "Event stream closed" })),
-      ),
-    );
-
-    const interrupt: Realtime["Type"]["interrupt"] = () =>
-      onInterrupt({ audioQueue, eventQueue }).pipe(
-        Effect.tap(() => Effect.log(`${PROVIDER_NAME} interrupt`)),
-      );
-
-    const submitToolOutput: Realtime["Type"]["submitToolOutput"] = (callId, name, output) =>
-      Effect.gen(function* () {
-        const outputStr = serializeToolOutput(output);
-        yield* socket.send({
-          toolResponse: {
-            functionResponses: [
-              {
-                id: callId,
-                name,
-                response: { result: outputStr },
-              },
-            ],
-          },
-        });
-      });
-
-    const requestResponse: Realtime["Type"]["requestResponse"] = () => Effect.void;
-
+    const params = t.parametersJsonSchema ?? {};
     return {
-      send,
-      receive,
-      events,
-      interrupt,
-      submitToolOutput,
-      requestResponse,
+      name: t.name ?? "unknown",
+      description: t.description ?? "",
+      parameters: sanitizeParametersForGemini(
+        typeof params === "object" && params !== null ? params : {},
+      ),
     };
-  }).pipe(Effect.withSpan("gemini.provider"));
+  });
+  return {
+    model: modelName,
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: voice
+        ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } }
+        : undefined,
+    },
+    systemInstruction: { role: "user", parts: [{ text: systemPrompt }] },
+    tools:
+      tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
+    realtimeInputConfig: {},
+    outputAudioTranscription: {},
+  };
 }
 
-/** Layer factory for Gemini Realtime. */
-export function make(
+function geminiAdapter(
   options?: GeminiRealtimeOptions,
-): Layer.Layer<Realtime, ProviderError, Scope.Scope | Agent> {
-  return Layer.scoped(Realtime, runFlow(options));
+): RealtimeAdapter<GeminiServerMessage, GeminiHandlerState> {
+  return {
+    name: "Gemini",
+    initialState: initialGeminiHandlerState,
+    schema: GeminiServerMessageSchema,
+
+    connect: (agent, ctx) =>
+      Effect.gen(function* () {
+        const apiKey = yield* Config.redacted("GEMINI_API_KEY").pipe(
+          Effect.orElse(() => Config.redacted("GOOGLE_API_KEY")),
+          Effect.mapError(
+            (e) =>
+              new ProviderError({
+                provider: "Gemini",
+                reason:
+                  "Missing or invalid GEMINI_API_KEY / GOOGLE_API_KEY",
+                cause: e,
+              }),
+          ),
+        );
+        const url = `${GEMINI_LIVE_WS_URL}?key=${encodeURIComponent(Redacted.value(apiKey))}`;
+        const ws = yield* Effect.async<InstanceType<typeof WS>, ProviderError>(
+          (resume) => {
+            const socket = new WS(url);
+            socket.on("open", () => resume(Effect.succeed(socket)));
+            socket.on("error", (err) =>
+              resume(
+                Effect.fail(
+                  new ProviderError({
+                    provider: "Gemini",
+                    reason: `WebSocket connection failed: ${err.message}`,
+                    cause: err,
+                  }),
+                ),
+              ),
+            );
+          },
+        );
+        ws.send(
+          JSON.stringify({ setup: buildSessionSetup(agent, ctx, options) }),
+        );
+        return yield* makeMessageSocket(ws as any, { provider: "Gemini" });
+      }),
+
+    handler: handleGeminiMessage,
+
+    onSessionReady: (socket) =>
+      socket.send({
+        clientContent: {
+          turns: {
+            role: "user",
+            parts: [{ text: "Say your greeting." }],
+          },
+          turnComplete: true,
+        },
+      }),
+
+    onInterrupt: (ctx) =>
+      Effect.gen(function* () {
+        yield* Queue.takeAll(ctx.audioQueue);
+        yield* Queue.offer(
+          ctx.eventQueue,
+          new Interrupted({ timestamp: Date.now() }),
+        );
+      }),
+
+    encodeSend: (frame) => ({
+      realtimeInput: {
+        audio: {
+          mimeType: GEMINI_AUDIO_MIME,
+          data:
+            frame.samples instanceof Buffer
+              ? frame.samples.toString("base64")
+              : Buffer.from(frame.samples).toString("base64"),
+        },
+      },
+    }),
+
+    encodeToolOutput: (callId, name, output) => ({
+      toolResponse: {
+        functionResponses: [
+          {
+            id: callId,
+            name,
+            response: { result: serializeToolOutput(output) },
+          },
+        ],
+      },
+    }),
+  };
+}
+
+export function make(options?: GeminiRealtimeOptions) {
+  return makeRealtimeLayer(geminiAdapter(options));
 }

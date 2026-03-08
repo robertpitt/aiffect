@@ -1,8 +1,9 @@
 import { Config, Effect, Layer, Redacted, Stream } from "effect";
-import { STT } from "../../framework/Provider.js";
-import { ProviderError } from "../../framework/Errors.js";
-import { TranscriptDelta } from "../../schemas/Events.js";
-import type { AudioFrame } from "../../schemas/AudioFrame.js";
+import { STT } from "../../core/Provider.js";
+import { ProviderError } from "../../core/Errors.js";
+import { TranscriptDelta } from "../../core/Events.js";
+import type { AudioFrame } from "../../core/AudioFrame.js";
+import { pcm16Rms } from "../../internal/audio.js";
 
 const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -13,20 +14,8 @@ export interface OpenAISTTOptions {
   readonly silenceMs?: number;
   /** Minimum speech duration in ms before a segment is considered valid. */
   readonly minSpeechMs?: number;
-  /** Normalised RMS energy threshold for speech detection (0–1). */
+  /** Normalised RMS energy threshold for speech detection (0--1). */
   readonly energyThreshold?: number;
-}
-
-function pcm16Rms(samples: Uint8Array): number {
-  const view = new DataView(samples.buffer, samples.byteOffset, samples.byteLength);
-  const count = samples.byteLength / 2;
-  if (count === 0) return 0;
-  let sum = 0;
-  for (let i = 0; i < count; i++) {
-    const s = view.getInt16(i * 2, true);
-    sum += s * s;
-  }
-  return Math.sqrt(sum / count) / 32768;
 }
 
 function writeStr(view: DataView, offset: number, s: string) {

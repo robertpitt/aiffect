@@ -1,9 +1,5 @@
-/**
- * Effect Metrics for realtime usage (tokens, optional latency).
- * Use Metric.counter with incremental: true; tag by provider/session via Effect.tagMetrics or Effect.tagMetricsScoped.
- */
-
-import { Duration, Metric } from "effect";
+import { Effect, Metric } from "effect";
+import type { ResponseCompleted } from "../core/Events.js";
 
 export const inputTokensCounter: Metric.Metric.Counter<number> = Metric.counter(
   "realtime_input_tokens",
@@ -21,9 +17,11 @@ export const outputTokensCounter: Metric.Metric.Counter<number> = Metric.counter
   },
 ).pipe(Metric.tagged("component", "realtime"));
 
-export const responseDurationTimer: Metric.Metric.Histogram<Duration.Duration> =
-  Metric.timerWithBoundaries(
-    "realtime_response_duration_ms",
-    [10, 50, 100, 500, 1000],
-    "Response duration in milliseconds",
-  );
+/** Increment token metrics from a ResponseCompleted event. No-op if both are 0. */
+export const trackTokenUsage = (event: ResponseCompleted): Effect.Effect<void> => {
+  if (event.inputTokens === 0 && event.outputTokens === 0) return Effect.void;
+  return Effect.all([
+    inputTokensCounter(Effect.succeed(event.inputTokens)),
+    outputTokensCounter(Effect.succeed(event.outputTokens)),
+  ]).pipe(Effect.asVoid);
+};

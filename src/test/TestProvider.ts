@@ -4,10 +4,10 @@
  */
 
 import { Effect, Layer, Queue, Stream } from "effect";
-import { AudioFrame } from "../schemas/AudioFrame.js";
-import { Realtime } from "../framework/Provider.js";
-import { ProviderError } from "../framework/Errors.js";
-import type { PipelineEvent } from "../schemas/Events.js";
+import { AudioFrame } from "../core/AudioFrame.js";
+import { Realtime } from "../core/Provider.js";
+import { ProviderError } from "../core/Errors.js";
+import type { PipelineEvent } from "../core/Events.js";
 
 export interface TestRealtimeHarness {
   readonly layer: Layer.Layer<Realtime>;
