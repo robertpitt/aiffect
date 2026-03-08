@@ -35,6 +35,9 @@
     "ws": "^8.18.0"
   },
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.js"
+    }
   }
 }

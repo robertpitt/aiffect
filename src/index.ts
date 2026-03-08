@@ -12,6 +12,7 @@ export {
   Agent,
   type AgentSpec,
   type AgentContext,
+  type DefineAgentParams,
   defineAgent,
 } from "./core/Agent.js";
 
@@ -65,6 +66,16 @@ export {
   ResponseCompleted,
   AudioOutputStarted,
   AudioOutputDone,
+  isTranscriptDelta,
+  isSpeechStarted,
+  isSpeechEnded,
+  isInterrupted,
+  isToolCallStarted,
+  isToolCallCompleted,
+  isResponseStarted,
+  isResponseCompleted,
+  isAudioOutputStarted,
+  isAudioOutputDone,
 } from "./core/Events.js";
 
 // ---------------------------------------------------------------------------

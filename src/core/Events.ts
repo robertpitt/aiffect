@@ -87,3 +87,38 @@ export type PipelineEvent =
   | AudioOutputStarted
   | AudioOutputDone;
 
+// ---------------------------------------------------------------------------
+// Type guards (for narrowing PipelineEvent in user code)
+// ---------------------------------------------------------------------------
+
+export function isTranscriptDelta(e: PipelineEvent): e is TranscriptDelta {
+  return e._tag === "TranscriptDelta";
+}
+export function isSpeechStarted(e: PipelineEvent): e is SpeechStarted {
+  return e._tag === "SpeechStarted";
+}
+export function isSpeechEnded(e: PipelineEvent): e is SpeechEnded {
+  return e._tag === "SpeechEnded";
+}
+export function isInterrupted(e: PipelineEvent): e is Interrupted {
+  return e._tag === "Interrupted";
+}
+export function isToolCallStarted(e: PipelineEvent): e is ToolCallStarted {
+  return e._tag === "ToolCallStarted";
+}
+export function isToolCallCompleted(e: PipelineEvent): e is ToolCallCompleted {
+  return e._tag === "ToolCallCompleted";
+}
+export function isResponseStarted(e: PipelineEvent): e is ResponseStarted {
+  return e._tag === "ResponseStarted";
+}
+export function isResponseCompleted(e: PipelineEvent): e is ResponseCompleted {
+  return e._tag === "ResponseCompleted";
+}
+export function isAudioOutputStarted(e: PipelineEvent): e is AudioOutputStarted {
+  return e._tag === "AudioOutputStarted";
+}
+export function isAudioOutputDone(e: PipelineEvent): e is AudioOutputDone {
+  return e._tag === "AudioOutputDone";
+}
+

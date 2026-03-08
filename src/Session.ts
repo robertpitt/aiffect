@@ -61,15 +61,18 @@ function resolveAgent(
   if (options.agentId && options.agents) {
     const found = options.agents[options.agentId];
     if (found) return Effect.succeed(found);
+    const available = Object.keys(options.agents).join(", ");
     return Effect.fail(
       new ConfigError({
-        reason: `Agent not found: ${options.agentId}`,
+        reason: available
+          ? `Agent not found: "${options.agentId}". Available: ${available}`
+          : `Agent not found: "${options.agentId}". No agents in record.`,
       }),
     );
   }
   return Effect.fail(
     new ConfigError({
-      reason: "Either agent or agents + agentId must be provided",
+      reason: "Either agent or (agentId + agents) must be provided",
     }),
   );
 }

@@ -26,6 +26,14 @@ export interface DefineAgentParams {
 /**
  * Construct an AgentSpec with `handleToolCall` derived automatically from
  * the toolkit and toolkitLayer. Prefer this over manually constructing AgentSpec.
+ *
+ * @example
+ * const agent = defineAgent({
+ *   name: "Demo",
+ *   buildPrompt: (ctx) => `Session ${ctx.sessionId}. You are helpful.`,
+ *   toolkit: DemoToolkit,
+ *   toolkitLayer: DemoToolkitLive,
+ * });
  */
 export function defineAgent(spec: DefineAgentParams): AgentSpec {
   return {
