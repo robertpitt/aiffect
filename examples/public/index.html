@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>aiffect-ts — Voice Test</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #0a0a0f;
+        color: #e4e4e7;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app {
+        width: 100%;
+        max-width: 480px;
+        padding: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: #fafafa;
+      }
+
+      h1 span {
+        color: #6366f1;
+      }
+
+      .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #71717a;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #3f3f46;
+        transition: background 0.3s;
+      }
+
+      .status-dot.connected {
+        background: #22c55e;
+        box-shadow: 0 0 6px #22c55e88;
+      }
+      .status-dot.connecting {
+        background: #eab308;
+        animation: pulse 1s infinite;
+      }
+
+      @keyframes pulse {
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      .visualizer-wrap {
+        position: relative;
+        height: 96px;
+        background: #18181b;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #27272a;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .controls {
+        display: flex;
+        gap: 0.75rem;
+      }
+
+      button {
+        flex: 1;
+        padding: 0.7rem 1.25rem;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .btn-connect {
+        background: #6366f1;
+        color: #fff;
+      }
+      .btn-connect:hover {
+        background: #4f46e5;
+      }
+      .btn-connect:disabled {
+        background: #3f3f46;
+        color: #71717a;
+        cursor: default;
+      }
+
+      .btn-disconnect {
+        background: #27272a;
+        color: #a1a1aa;
+      }
+      .btn-disconnect:hover {
+        background: #3f3f46;
+      }
+      .btn-disconnect:disabled {
+        background: #1c1c1e;
+        color: #52525b;
+        cursor: default;
+      }
+
+      .transcript {
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 12px;
+        padding: 1rem;
+        min-height: 180px;
+        max-height: 320px;
+        overflow-y: auto;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .transcript:empty::before {
+        content: "Transcripts will appear here…";
+        color: #52525b;
+      }
+
+      .t-user {
+        color: #a78bfa;
+      }
+      .t-assistant {
+        color: #e4e4e7;
+      }
+      .t-system {
+        color: #6366f1;
+        font-style: italic;
+      }
+
+      .footer {
+        text-align: center;
+        font-size: 0.7rem;
+        color: #3f3f46;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <h1><span>aiffect</span> voice test</h1>
+
+      <div class="status-bar">
+        <div class="status-dot" id="dot"></div>
+        <span id="status">Disconnected</span>
+      </div>
+
+      <div class="visualizer-wrap">
+        <canvas id="viz"></canvas>
+      </div>
+
+      <div class="controls">
+        <button class="btn-connect" id="connectBtn">Connect</button>
+        <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
+      </div>
+
+      <div class="transcript" id="transcript"></div>
+
+      <div class="footer">PCM16 @ 24 kHz &middot; WebSocket</div>
+    </div>
+
+    <script>
+      const SAMPLE_RATE = 24000;
+      const WS_URL = `ws://${location.host}`;
+
+      let ws = null;
+      let audioCtx = null;
+      let micStream = null;
+      let captureNode = null;
+      let playbackQueue = [];
+      let isPlaying = false;
+      let currentSource = null;
+      let analyser = null;
+
+      const dot = document.getElementById("dot");
+      const statusEl = document.getElementById("status");
+      const transcript = document.getElementById("transcript");
+      const connectBtn = document.getElementById("connectBtn");
+      const disconnectBtn = document.getElementById("disconnectBtn");
+      const canvas = document.getElementById("viz");
+      const ctx = canvas.getContext("2d");
+
+      // ---------- UI helpers ----------
+
+      function setStatus(text, state) {
+        statusEl.textContent = text;
+        dot.className = "status-dot " + (state || "");
+      }
+
+      function addTranscript(role, text) {
+        const el = document.createElement("div");
+        el.className = "t-" + role;
+        const label = role === "user" ? "You" : role === "assistant" ? "AI" : "sys";
+        el.textContent = `[${label}] ${text}`;
+        transcript.appendChild(el);
+        transcript.scrollTop = transcript.scrollHeight;
+      }
+
+      // ---------- Visualizer ----------
+
+      function initVisualizer(source) {
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        drawViz();
+      }
+
+      function drawViz() {
+        if (!analyser) return;
+        requestAnimationFrame(drawViz);
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        const bufLen = analyser.frequencyBinCount;
+        const data = new Uint8Array(bufLen);
+        analyser.getByteFrequencyData(data);
+
+        const w = rect.width;
+        const h = rect.height;
+        ctx.clearRect(0, 0, w, h);
+
+        const barW = (w / bufLen) * 2.5;
+        const gap = 1;
+
+        for (let i = 0; i < bufLen; i++) {
+          const v = data[i] / 255;
+          const barH = v * h * 0.9;
+          const x = i * (barW + gap);
+          if (x > w) break;
+
+          const gradient = ctx.createLinearGradient(0, h, 0, h - barH);
+          gradient.addColorStop(0, "rgba(99,102,241,0.6)");
+          gradient.addColorStop(1, "rgba(139,92,246,0.3)");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(x, h - barH, barW, barH);
+        }
+      }
+
+      // ---------- Audio capture (mic → PCM16 → WS) ----------
+
+      const captureWorklet = `
+class CaptureProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) {
+      const pcm = new Int16Array(ch.length);
+      for (let i = 0; i < ch.length; i++) {
+        const s = Math.max(-1, Math.min(1, ch[i]));
+        pcm[i] = s < 0 ? s * 32768 : s * 32767;
+      }
+      this.port.postMessage(pcm.buffer, [pcm.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor("capture-processor", CaptureProcessor);
+
+class PlaybackProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = [];
+    this.readIdx = 0;
+    this.port.onmessage = (e) => {
+      if (e.data === null) { this.buffer = []; this.readIdx = 0; return; }
+      this.buffer.push(e.data);
+    };
+  }
+  process(_, outputs) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    const frameLength = out.length;
+    let written = 0;
+    while (written < frameLength && this.buffer.length > 0) {
+      const chunk = this.buffer[0];
+      const fromChunk = Math.min(chunk.length - this.readIdx, frameLength - written);
+      for (let i = 0; i < fromChunk; i++) out[written + i] = chunk[this.readIdx + i];
+      written += fromChunk;
+      this.readIdx += fromChunk;
+      if (this.readIdx >= chunk.length) { this.buffer.shift(); this.readIdx = 0; }
+    }
+    for (let i = written; i < frameLength; i++) out[i] = 0;
+    return true;
+  }
+}
+registerProcessor("playback-processor", PlaybackProcessor);
+`;
+
+      async function startCapture() {
+        audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+        const blob = new Blob([captureWorklet], { type: "application/javascript" });
+        const url = URL.createObjectURL(blob);
+        await audioCtx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: SAMPLE_RATE,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+
+        const source = audioCtx.createMediaStreamSource(micStream);
+        captureNode = new AudioWorkletNode(audioCtx, "capture-processor");
+
+        captureNode.port.onmessage = (e) => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(new Uint8Array(e.data));
+          }
+        };
+
+        source.connect(captureNode);
+        captureNode.connect(audioCtx.destination); // needed to keep processor alive
+
+        playbackNode = new AudioWorkletNode(audioCtx, "playback-processor");
+        playbackNode.connect(audioCtx.destination);
+
+        initVisualizer(source);
+      }
+
+      // ---------- Audio playback (WS → PCM16 → speaker) ----------
+      // PlaybackWorklet (in same module as capture) pulls from a ring buffer for gapless playback.
+
+      let playbackNode = null;
+
+      function enqueuePlayback(pcm16Bytes) {
+        if (!playbackNode) return;
+        const int16 = new Int16Array(
+          pcm16Bytes.buffer,
+          pcm16Bytes.byteOffset,
+          pcm16Bytes.byteLength / 2,
+        );
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+        playbackNode.port.postMessage(float32);
+      }
+
+      function clearPlayback() {
+        if (playbackNode) {
+          playbackNode.port.postMessage(null);
+        }
+        playbackQueue = [];
+        currentSource = null;
+        isPlaying = false;
+      }
+
+      // ---------- WebSocket ----------
+
+      function connect() {
+        setStatus("Connecting…", "connecting");
+        connectBtn.disabled = true;
+
+        ws = new WebSocket(WS_URL);
+        ws.binaryType = "arraybuffer";
+
+        ws.onopen = async () => {
+          setStatus("Connected — requesting mic…", "connecting");
+          try {
+            await startCapture();
+            setStatus("Connected", "connected");
+            disconnectBtn.disabled = false;
+            addTranscript("system", "Session started");
+          } catch (err) {
+            addTranscript("system", "Microphone denied: " + err.message);
+            disconnect();
+          }
+        };
+
+        ws.onmessage = (e) => {
+          if (e.data instanceof ArrayBuffer) {
+            enqueuePlayback(new Uint8Array(e.data));
+          } else {
+            try {
+              const msg = JSON.parse(e.data);
+              if (msg.type === "clear") {
+                clearPlayback();
+                addTranscript("system", "Interrupted");
+              } else if (msg._tag === "TranscriptDelta") {
+                addTranscript(msg.role, msg.text);
+              }
+            } catch {}
+          }
+        };
+
+        ws.onclose = () => {
+          setStatus("Disconnected");
+          cleanup();
+        };
+
+        ws.onerror = () => {
+          setStatus("Connection error");
+          cleanup();
+        };
+      }
+
+      function disconnect() {
+        if (ws) ws.close();
+        cleanup();
+      }
+
+      function cleanup() {
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        dot.className = "status-dot";
+        if (micStream) {
+          micStream.getTracks().forEach((t) => t.stop());
+          micStream = null;
+        }
+        if (captureNode) {
+          captureNode.disconnect();
+          captureNode = null;
+        }
+        if (playbackNode) {
+          playbackNode.disconnect();
+          playbackNode = null;
+        }
+        if (audioCtx) {
+          audioCtx.close();
+          audioCtx = null;
+        }
+        analyser = null;
+        clearPlayback();
+        ws = null;
+      }
+
+      connectBtn.addEventListener("click", connect);
+      disconnectBtn.addEventListener("click", disconnect);
+    </script>
+  </body>
+</html>
