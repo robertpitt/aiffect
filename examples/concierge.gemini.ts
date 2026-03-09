@@ -39,9 +39,7 @@ wss.on("connection", (ws, req) => {
     transport: WebSocketTransport(ws),
     serverContext: SampleServerContextLive,
     session: voice ? { providerOptions: { voice } } : undefined,
-  }).pipe(
-    Effect.catchCause((cause) => Effect.log(`session ended: ${cause}`)),
-  );
+  }).pipe(Effect.catchCause((cause) => Effect.log(`session ended: ${cause}`)));
 
   Effect.runFork(session);
 });
